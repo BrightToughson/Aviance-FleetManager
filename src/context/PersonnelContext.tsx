@@ -111,8 +111,10 @@ export function PersonnelProvider({ children }: { children: React.ReactNode }) {
             });
         }
 
-        // Map driver details if they exist
-        const details = p.driver_details && p.driver_details.length > 0 ? p.driver_details[0] : null;
+        // Map driver details whether returned as a single 1-to-1 object or an array
+        const details = Array.isArray(p.driver_details)
+          ? (p.driver_details[0] || null)
+          : (p.driver_details || null);
         
         return {
           id: p.id,
@@ -127,7 +129,7 @@ export function PersonnelProvider({ children }: { children: React.ReactNode }) {
           vehicle: vehicleMap.get(p.id) || 'Unassigned',
           licenseExp: details?.license_expiry || '',
           licenseNumber: details?.license_number || '',
-          score: details?.rating ? parseFloat(details.rating) : 0,
+          score: details?.rating != null ? parseFloat(details.rating) : 100,
           joinedDate: new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
           isProfile: true
         };
@@ -183,9 +185,20 @@ export function PersonnelProvider({ children }: { children: React.ReactNode }) {
         )
         .subscribe();
 
+      const detailsChannel = supabase.channel('manager_driver_details_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'driver_details' },
+          () => {
+            fetchPersonnel();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(profilesChannel);
         supabase.removeChannel(vehiclesChannel);
+        supabase.removeChannel(detailsChannel);
       };
     }
   }, [user?.id]);
@@ -294,6 +307,19 @@ export function PersonnelProvider({ children }: { children: React.ReactNode }) {
         console.error('Error updating profile in Supabase:', error);
         await fetchPersonnel();
         throw error;
+      }
+
+      if (updates.licenseExp !== undefined || updates.licenseNumber !== undefined || updates.score !== undefined) {
+        const detailsPayload: any = {
+          profile_id: id,
+          updated_at: new Date().toISOString(),
+        };
+        if (updates.licenseExp !== undefined) detailsPayload.license_expiry = updates.licenseExp || null;
+        if (updates.licenseNumber !== undefined) detailsPayload.license_number = updates.licenseNumber || null;
+        if (updates.score !== undefined) detailsPayload.rating = updates.score;
+
+        const { error: dErr } = await supabase.from('driver_details').upsert(detailsPayload);
+        if (dErr) console.warn('Could not update driver_details:', dErr);
       }
     } else {
       const contactPayload: any = {};

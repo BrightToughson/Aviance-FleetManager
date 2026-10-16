@@ -137,6 +137,30 @@ export default function DriversScreen() {
     );
   }, [drivers, searchQuery, listFilter, statusFilter]);
 
+  const formatLicenseExp = (dateStr?: string) => {
+    if (!dateStr || dateStr.trim() === '') return { text: '—', color: '#9CA3AF', isUrgent: false };
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return { text: dateStr, color: '#374151', isUrgent: false };
+      
+      const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const diffTime = d.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays < 0) {
+        return { text: `${formatted} (Expired)`, color: '#EF4444', isUrgent: true };
+      }
+      if (diffDays <= 30) {
+        return { text: `${formatted} (${diffDays}d left)`, color: '#D97706', isUrgent: true };
+      }
+      return { text: formatted, color: '#374151', isUrgent: false };
+    } catch {
+      return { text: dateStr, color: '#374151', isUrgent: false };
+    }
+  };
+
   const handleAddDriver = () => {
     if (!form.name) {
       if (Platform.OS === 'web') window.alert("Please enter a name.");
@@ -481,7 +505,14 @@ export default function DriversScreen() {
             {/* License */}
             <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
               {isMobile && <Text style={styles.mobileLabel}>License Exp.</Text>}
-              <Text style={styles.cellText}>{driver.licenseExp}</Text>
+              {(() => {
+                const info = formatLicenseExp(driver.licenseExp);
+                return (
+                  <Text style={[styles.cellText, { color: info.color, fontWeight: info.isUrgent ? '600' : '400' }]}>
+                    {info.text}
+                  </Text>
+                );
+              })()}
             </View>
 
             {/* Score */}
