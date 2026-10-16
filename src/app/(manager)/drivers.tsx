@@ -97,7 +97,18 @@ export default function DriversScreen() {
   };
 
   // Form State
-  const [form, setForm] = useState({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
+  const [form, setForm] = useState({ 
+    name: '', 
+    licenseNumber: '', 
+    licenseExp: '', 
+    vehicle: '', 
+    vehicleId: '', 
+    oldDriver: '', 
+    status: 'Active', 
+    score: '100', 
+    email: '', 
+    phone: '' 
+  });
   
   // Vehicle Selection State
   const [vehicleSearch, setVehicleSearch] = useState('');
@@ -138,26 +149,52 @@ export default function DriversScreen() {
   }, [drivers, searchQuery, listFilter, statusFilter]);
 
   const formatLicenseExp = (dateStr?: string) => {
-    if (!dateStr || dateStr.trim() === '') return { text: '—', color: '#9CA3AF', isUrgent: false };
+    if (!dateStr || dateStr.trim() === '') return { date: '—', badge: null, color: '#9CA3AF', badgeBg: 'transparent', badgeColor: '#9CA3AF' };
     try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return { text: dateStr, color: '#374151', isUrgent: false };
+      const parts = dateStr.split(/[-/]/);
+      let d: Date;
+      if (parts.length === 3 && parts[0].length === 4) {
+        d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        d = new Date(dateStr);
+      }
+      
+      if (isNaN(d.getTime())) return { date: dateStr, badge: null, color: '#374151', badgeBg: 'transparent', badgeColor: '#9CA3AF' };
       
       const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const now = new Date();
       now.setHours(0, 0, 0, 0);
+      d.setHours(0, 0, 0, 0);
       const diffTime = d.getTime() - now.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       
       if (diffDays < 0) {
-        return { text: `${formatted} (Expired)`, color: '#EF4444', isUrgent: true };
+        return { 
+          date: formatted, 
+          badge: 'Expired', 
+          color: '#111827', 
+          badgeBg: '#FEE2E2', 
+          badgeColor: '#EF4444' 
+        };
       }
       if (diffDays <= 30) {
-        return { text: `${formatted} (${diffDays}d left)`, color: '#D97706', isUrgent: true };
+        return { 
+          date: formatted, 
+          badge: `${diffDays}d left`, 
+          color: '#111827', 
+          badgeBg: '#FEF3C7', 
+          badgeColor: '#B45309' 
+        };
       }
-      return { text: formatted, color: '#374151', isUrgent: false };
+      return { 
+        date: formatted, 
+        badge: null, 
+        color: '#111827', 
+        badgeBg: 'transparent', 
+        badgeColor: '#9CA3AF' 
+      };
     } catch {
-      return { text: dateStr, color: '#374151', isUrgent: false };
+      return { date: dateStr, badge: null, color: '#374151', badgeBg: 'transparent', badgeColor: '#9CA3AF' };
     }
   };
 
@@ -178,9 +215,12 @@ export default function DriversScreen() {
     if (editingDriverId) {
       updatePerson(editingDriverId, {
         name: form.name,
+        phone: form.phone,
+        email: form.email,
         status: form.status,
         score: form.score ? parseInt(form.score) : 100,
-        licenseExp: form.license || '2030-01-01',
+        licenseNumber: form.licenseNumber,
+        licenseExp: form.licenseExp,
         vehicle: form.vehicle || 'Unassigned',
       });
     } else {
@@ -192,7 +232,8 @@ export default function DriversScreen() {
         email: form.email,
         status: form.status,
         score: form.score ? parseInt(form.score) : 100,
-        licenseExp: form.license || '2030-01-01',
+        licenseNumber: form.licenseNumber,
+        licenseExp: form.licenseExp,
         vehicle: form.vehicle || 'Unassigned',
         avatar: ''
       });
@@ -205,7 +246,7 @@ export default function DriversScreen() {
       });
     }
 
-    setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
+    setForm({ name: '', licenseNumber: '', licenseExp: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
     setEditingDriverId(null);
     setIsApproveMode(false);
     setIsModalVisible(false);
@@ -244,7 +285,8 @@ export default function DriversScreen() {
     
     setForm({
       name: driverToEdit.name,
-      license: driverToEdit.licenseExp || '',
+      licenseNumber: driverToEdit.licenseNumber || '',
+      licenseExp: driverToEdit.licenseExp || '',
       vehicle: driverToEdit.vehicle && driverToEdit.vehicle !== 'Unassigned' ? driverToEdit.vehicle : '',
       vehicleId: '',
       oldDriver: '',
@@ -508,9 +550,18 @@ export default function DriversScreen() {
               {(() => {
                 const info = formatLicenseExp(driver.licenseExp);
                 return (
-                  <Text style={[styles.cellText, { color: info.color, fontWeight: info.isUrgent ? '600' : '400' }]}>
-                    {info.text}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={[styles.cellText, { color: info.color }]}>
+                      {info.date}
+                    </Text>
+                    {info.badge && (
+                      <View style={{ backgroundColor: info.badgeBg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        <Text style={{ color: info.badgeColor, fontSize: 11, fontWeight: '700' }}>
+                          {info.badge}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 );
               })()}
             </View>
@@ -681,7 +732,7 @@ export default function DriversScreen() {
                     setIsModalVisible(false);
                     setEditingDriverId(null);
                     setIsApproveMode(false);
-                    setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
+                    setForm({ name: '', licenseNumber: '', licenseExp: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
                   }}>
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </TouchableOpacity>
@@ -708,8 +759,35 @@ export default function DriversScreen() {
                   </View>
                   
                   <View style={[styles.formGroup, { marginTop: 10, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#E5E7EB' }]}>
-                    <Text style={styles.label}>{t('driver_lbl_license', 'License Number')}</Text>
-                    <TextInput style={styles.input} value={form.license} onChangeText={(t) => setForm({...form, license: t})} placeholder="e.g. CDL-12345" />
+                    <Text style={styles.label}>{t('driver_lbl_license_no', 'Driver License Number')}</Text>
+                    <TextInput 
+                      style={styles.input} 
+                      value={form.licenseNumber} 
+                      onChangeText={(t) => setForm({...form, licenseNumber: t})} 
+                      placeholder="e.g. DL-123456789" 
+                    />
+                  </View>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>{t('driver_lbl_license_exp', 'License Expiration Date')}</Text>
+                    {Platform.OS === 'web' ? (
+                      React.createElement('input', {
+                        type: 'date',
+                        value: form.licenseExp || '',
+                        onChange: (e: any) => setForm({...form, licenseExp: e.target.value}),
+                        style: {
+                          borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: '10px 14px',
+                          fontSize: 14, color: '#111827', backgroundColor: '#fff',
+                          width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box'
+                        }
+                      })
+                    ) : (
+                      <TextInput 
+                        style={styles.input} 
+                        value={form.licenseExp} 
+                        onChangeText={(t) => setForm({...form, licenseExp: t})} 
+                        placeholder="YYYY-MM-DD" 
+                      />
+                    )}
                   </View>
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>{t('driver_lbl_vehicle', 'Assigned Vehicle')}</Text>
@@ -728,7 +806,7 @@ export default function DriversScreen() {
                     setIsModalVisible(false);
                     setEditingDriverId(null);
                     setIsApproveMode(false);
-                    setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
+                    setForm({ name: '', licenseNumber: '', licenseExp: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
                   }}>
                     <Text style={styles.cancelModalBtnText}>Cancel</Text>
                   </TouchableOpacity>
