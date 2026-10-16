@@ -80,14 +80,14 @@ export default function CreateFormScreen() {
     updateField(fieldIndex, { options: opts });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const cleanedFields = fields.map(f => ({
       ...f,
       label: f.label.trim() === '' ? 'Untitled Question' : f.label,
       name: (f.label.trim() === '' ? 'Untitled_Question' : f.label.replace(/[^a-zA-Z0-9]/g, '_')).toLowerCase() + '_' + Math.floor(Math.random()*1000)
     }));
 
-    const newId = createForm({
+    const newId = await createForm({
       title: title.trim() === '' ? 'Untitled Form' : title,
       description,
       fields: cleanedFields,

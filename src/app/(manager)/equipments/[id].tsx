@@ -4,41 +4,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import ResponsiveBarChart from '../../../components/ResponsiveBarChart';
-import ResponsiveStackedBarChart from '../../../components/ResponsiveStackedBarChart';
 import { useEquipments } from '../../../context/EquipmentContext';
+import { useTranslation } from 'react-i18next';
 
-const TABS = ['Overview', 'Specs', 'Financial', 'Warranties', 'Tire Management', 'Tire Activity', 'Telematics', 'Sensor Data Snapshots', 'Service History'];
-
-const costData = [
-  { stacks: [{value: 4100, color: '#06b6d4'}, {value: 500, color: '#eab308'}, {value: 100, color: '#a855f7'}], label: 'Jun' },
-  { stacks: [{value: 3800, color: '#06b6d4'}, {value: 200, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Jul' },
-  { stacks: [{value: 5200, color: '#06b6d4'}, {value: 1200, color: '#eab308'}, {value: 50, color: '#a855f7'}], label: 'Aug' },
-  { stacks: [{value: 4000, color: '#06b6d4'}, {value: 0, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Sep' },
-  { stacks: [{value: 4800, color: '#06b6d4'}, {value: 800, color: '#eab308'}, {value: 200, color: '#a855f7'}], label: 'Oct' },
-  { stacks: [{value: 3500, color: '#06b6d4'}, {value: 150, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Nov' },
-  { stacks: [{value: 4200, color: '#06b6d4'}, {value: 600, color: '#eab308'}, {value: 100, color: '#a855f7'}], label: 'Dec' },
-  { stacks: [{value: 3900, color: '#06b6d4'}, {value: 0, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Jan' },
-  { stacks: [{value: 4500, color: '#06b6d4'}, {value: 900, color: '#eab308'}, {value: 150, color: '#a855f7'}], label: 'Feb' },
-  { stacks: [{value: 4100, color: '#06b6d4'}, {value: 200, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Mar' },
-  { stacks: [{value: 4032, color: '#06b6d4'}, {value: 164, color: '#eab308'}, {value: 0, color: '#a855f7'}], label: 'Apr' },
-  { stacks: [{value: 2800, color: '#06b6d4'}, {value: 100, color: '#eab308'}, {value: 50, color: '#a855f7'}], label: 'May' },
-];
-
-const utilData = [
-  {value: 120, label: 'Jun'}, {value: 150, label: 'Jul'}, {value: 180, label: 'Aug'}, {value: 100, label: 'Sep'},
-  {value: 220, label: 'Oct'}, {value: 130, label: 'Nov'}, {value: 170, label: 'Dec'}, {value: 160, label: 'Jan'},
-  {value: 210, label: 'Feb'}, {value: 140, label: 'Mar'}, {value: 190, label: 'Apr'}, {value: 80, label: 'May'}
-];
+const TABS = ['Overview', 'Documents'];
 
 export default function EquipmentDetailsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
   const { width } = useWindowDimensions();
   const [activeTab, setActiveTab] = useState('Overview');
-  const [documents, setDocuments] = useState([
-    { id: '1', name: 'Freightliner_Powertrain.pdf', size: '2.4 MB', date: 'Oct 12, 2018' }
-  ]);
+  const [documents, setDocuments] = useState<any[]>([]);
 
   const handleUploadDocument = async () => {
     try {
@@ -60,130 +37,72 @@ export default function EquipmentDetailsScreen() {
   const isLarge = width >= 1024;
   const isMedium = width >= 768;
   const hasSidebar = width >= 768;
-  const mainWidth = hasSidebar ? width - 280 : width;
-  const rightColWidth = isLarge ? mainWidth * 0.55 : '100%';
-  const chartWidth = isLarge ? (mainWidth * 0.55) - 80 : mainWidth - 80;
-  const chartConfig = {
-    backgroundGradientFrom: '#fff',
-    backgroundGradientTo: '#fff',
-    color: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-    barPercentage: 0.6,
-    propsForLabels: { fontSize: 10 },
-  };
 
   const { equipments, updateEquipmentImage, updateEquipmentData } = useEquipments();
   const currentEquipment = equipments.find((v: any) => v.id === id) || equipments[0];
 
   const [isEditing, setIsEditing] = useState(false);
-  const [equipmentImage, setEquipmentImage] = useState(currentEquipment.image || 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&q=80&w=200&h=200');
+  const [equipmentImage, setEquipmentImage] = useState(currentEquipment?.image || 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=200&q=80');
   
-  const [labels, setLabels] = useState(['Heavy Duty', 'Leased']);
   const [labelsModalVisible, setLabelsModalVisible] = useState(false);
-  const [newLabel, setNewLabel] = useState('');
   
-  const [personalizeVisible, setPersonalizeVisible] = useState(false);
-  const [dashboardPrefs, setDashboardPrefs] = useState({
-    'Cost per Mile': true,
-    'Utilization': true,
-    'Recent Activity': true,
-    'Documents': true
-  });
-
-  const togglePref = (key: keyof typeof dashboardPrefs) => {
-    setDashboardPrefs(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
   const [imagePickerModalVisible, setImagePickerModalVisible] = useState(false);
 
-  const handleTakePhoto = async () => {
-    setImagePickerModalVisible(false);
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permissionResult.granted) {
-        if (Platform.OS === 'web') {
-          window.alert("You've refused to allow this app to access your camera!");
-        } else {
-          Alert.alert("Permission Denied", "You've refused to allow this app to access your camera!");
-        }
-        return;
-      }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled) {
-        setEquipmentImage(result.assets[0].uri);
-        updateEquipmentImage(currentEquipment.id, result.assets[0].uri);
-      }
-    } catch (err) {
-      console.log(err);
+  const handlePickImage = async () => {
+    if (Platform.OS === 'web') {
+      setImagePickerModalVisible(true);
+      return;
+    }
+    
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setEquipmentImage(result.assets[0].uri);
+      await updateEquipmentImage(id as string, result.assets[0].uri);
     }
   };
 
-  const handleChooseFromLibrary = async () => {
-    setImagePickerModalVisible(false);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled) {
-        setEquipmentImage(result.assets[0].uri);
-        updateEquipmentImage(currentEquipment.id, result.assets[0].uri);
-      }
-    } catch (err) {
-      console.log(err);
+  const handleWebImageUpload = (e: any) => {
+    const file = e.target.files[0];
+    if (file) {
+      const uri = URL.createObjectURL(file);
+      setEquipmentImage(uri);
+      updateEquipmentImage(id as string, uri);
+      setImagePickerModalVisible(false);
     }
-  };
-
-  const handlePickImage = () => {
-    setImagePickerModalVisible(true);
-  };
-
-  const handleAddLabel = () => {
-    if (newLabel.trim()) {
-      setLabels([...labels, newLabel.trim()]);
-      setNewLabel('');
-    }
-  };
-
-  const removeLabel = (indexToRemove: number) => {
-    setLabels(labels.filter((_, index) => index !== indexToRemove));
   };
 
   const [equipmentData, setEquipmentData] = useState({
-    id: currentEquipment.id,
-    name: currentEquipment.name,
-    meter: currentEquipment.meter && !currentEquipment.meter.startsWith('0 ') ? currentEquipment.meter : 'N/A',
-    status: currentEquipment.status,
-    autoIntegrate: 'Enabled - Pending',
-    group: currentEquipment.group,
-    operator: currentEquipment.assignedTo || 'Unassigned',
-    type: currentEquipment.type,
-    fuelType: '--',
-    serialNumber: currentEquipment.serialNumber,
-    plate: currentEquipment.plate || '--',
-    year: currentEquipment.year,
-    make: currentEquipment.make,
-    engine: '12.8L',
-    transmission: '10-Speed Automatic',
-    drive: '6x4',
-    gvwr: '52,000 lbs',
-    wheelbase: '230 in',
-    purchasePrice: 'GH₵145,000.00',
-    purchaseDate: 'Oct 12, 2018',
-    currentValue: 'GH₵82,500.00',
-    loan: 'Paid Off',
-    powertrainWarranty: '5 Years / 500,000 Miles',
-    powertrainExpires: 'Oct 12, 2023',
-    bumperToBumper: '3 Years / 300,000 Miles',
-    bumperExpires: 'Oct 12, 2021',
+    id: currentEquipment?.id,
+    name: currentEquipment?.name,
+    status: currentEquipment?.status || 'Available',
+    group: currentEquipment?.group || 'Unassigned',
+    assignedTo: currentEquipment?.assignedTo || 'Available in Warehouse',
+    type: currentEquipment?.type || 'Equipment',
+    serialNumber: currentEquipment?.serialNumber || '--',
+    year: currentEquipment?.year || '--',
+    make: currentEquipment?.make || '--',
+    model: currentEquipment?.model || '--',
   });
+
+  const saveDetails = async () => {
+    setIsEditing(false);
+    // await updateEquipmentData(equipmentData.id, { ...equipmentData });
+    if (Platform.OS === 'web') {
+      window.alert("Equipment details updated successfully!");
+    } else {
+      Alert.alert("Success", "Equipment details updated successfully!");
+    }
+  }
+
+  if (!currentEquipment) {
+    return <View style={styles.container}><Text>Equipment not found.</Text></View>;
+  }
 
   return (
     <View style={styles.container}>
@@ -200,7 +119,7 @@ export default function EquipmentDetailsScreen() {
           style={styles.backBtn}
         >
           <Ionicons name="arrow-back" size={20} color="#4B5563" />
-          <Text style={styles.backText}>Equipments</Text>
+          <Text style={styles.backText}>{t('equip_title', 'Equipments')}</Text>
         </TouchableOpacity>
         
         <View style={styles.headerContent}>
@@ -213,40 +132,29 @@ export default function EquipmentDetailsScreen() {
             </TouchableOpacity>
             <View>
               <Text style={styles.title}>{equipmentData.name}</Text>
-              <Text style={styles.subtitle}>{equipmentData.type} • {equipmentData.year} {equipmentData.make} • {equipmentData.serialNumber}</Text>
+              <Text style={styles.subtitle}>{equipmentData.type} • {equipmentData.year} {equipmentData.make} {equipmentData.model}</Text>
               <View style={styles.badgesRow}>
-                <Text style={styles.metaText}>{equipmentData.meter}</Text>
-                <View style={styles.dot} />
-                <View style={styles.statusBadge}><View style={styles.statusDot}/><Text style={styles.statusText}>{equipmentData.status}</Text></View>
+                <View style={styles.statusBadge}>
+                  <View style={[styles.statusDot, equipmentData.assignedTo !== 'Available in Warehouse' && {backgroundColor: '#3B82F6'}]} />
+                  <Text style={[styles.statusText, equipmentData.assignedTo !== 'Available in Warehouse' && {color: '#1D4ED8'}]}>
+                    {equipmentData.assignedTo !== 'Available in Warehouse' ? 'Checked Out' : 'Available'}
+                  </Text>
+                </View>
                 <Text style={styles.metaText}>{equipmentData.group}</Text>
-                <Text style={styles.metaText}>{equipmentData.operator}</Text>
-              </View>
-              
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-                {labels.map((lbl, idx) => (
-                  <View key={idx} style={{ backgroundColor: '#E0E7FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginRight: 8, marginBottom: 5 }}>
-                    <Text style={{ color: '#3730A3', fontSize: 12, fontWeight: '500' }}>{lbl}</Text>
-                  </View>
-                ))}
-                <TouchableOpacity style={styles.editLabelsBtn} onPress={() => setLabelsModalVisible(true)}>
-                  <Ionicons name="pricetag-outline" size={14} color="#6B7280" style={{marginRight: 4}} />
-                  <Text style={styles.editLabelsText}>Edit Labels</Text>
-                </TouchableOpacity>
+                <Text style={styles.metaText}>SN: {equipmentData.serialNumber}</Text>
               </View>
             </View>
           </View>
           
           {!isMedium ? null : (
             <View style={styles.headerRight}>
-              <View style={styles.avatarCircle}><Text style={styles.avatarText}>SC</Text></View>
-              <TouchableOpacity style={styles.iconBtn}><Ionicons name="person-add-outline" size={18} color="#6B7280" /></TouchableOpacity>
-              <TouchableOpacity style={styles.watchBtn}><Ionicons name="eye-off-outline" size={18} color="#6B7280" style={{marginRight: 4}}/><Text style={styles.watchText}>Unwatch</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.iconBtn}><Ionicons name="ellipsis-horizontal" size={18} color="#6B7280" /></TouchableOpacity>
-              <TouchableOpacity style={styles.editBtn} onPress={() => setIsEditing(!isEditing)}>
+              <TouchableOpacity style={styles.editBtn} onPress={() => {
+                if (isEditing) saveDetails();
+                else setIsEditing(true);
+              }}>
                 <Ionicons name="pencil-outline" size={16} color="#374151" style={{marginRight: 6}}/>
-                <Text style={styles.editText}>{isEditing ? 'Save' : 'Edit'}</Text>
+                <Text style={styles.editText}>{isEditing ? t('common_save', 'Save') : t('common_edit', 'Edit')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.addBtn}><Ionicons name="add" size={18} color="#fff" style={{marginRight: 4}}/><Text style={styles.addBtnText}>Add</Text><Ionicons name="chevron-down" size={16} color="#fff" style={{marginLeft: 4}}/></TouchableOpacity>
             </View>
           )}
         </View>
@@ -260,12 +168,7 @@ export default function EquipmentDetailsScreen() {
               <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={styles.tab}><Text style={styles.tabText}>More <Ionicons name="chevron-down" size={12} /></Text></TouchableOpacity>
         </ScrollView>
-        <TouchableOpacity style={styles.personalizeBtn} onPress={() => setPersonalizeVisible(true)}>
-          <Ionicons name="options-outline" size={16} color="#4B5563" style={{marginRight: 6}} />
-          <Text style={styles.personalizeText}>Personalize</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Content */}
@@ -275,16 +178,18 @@ export default function EquipmentDetailsScreen() {
           {activeTab === 'Overview' && (
             <>
               {/* Left Col - Details */}
-              <View style={[styles.detailsCol, isMedium && { flex: 1, marginRight: 20 }]}>
+              <View style={[styles.detailsCol, isMedium && { flex: 1 }]}>
                 <View style={styles.card}>
                   <View style={[styles.cardHeaderRow, { marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 10 }]}>
                     <View>
-                      <Text style={styles.cardTitle}>Details</Text>
-                      <Text style={[styles.sectionHeader, { borderBottomWidth: 0, paddingBottom: 0, marginBottom: 0 }]}>All Fields</Text>
+                      <Text style={styles.cardTitle}>{t('equip_details_title', 'Equipment Details')}</Text>
                     </View>
                     {!isMedium && (
-                      <TouchableOpacity style={[styles.addBtn, { paddingHorizontal: 12 }]} onPress={() => setIsEditing(!isEditing)}>
-                        <Text style={styles.addBtnText}>{isEditing ? 'Save Details' : 'Edit Details'}</Text>
+                      <TouchableOpacity style={[styles.addBtn, { paddingHorizontal: 12 }]} onPress={() => {
+                        if (isEditing) saveDetails();
+                        else setIsEditing(true);
+                      }}>
+                        <Text style={styles.addBtnText}>{isEditing ? t('common_save', 'Save') : t('common_edit', 'Edit')}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -294,423 +199,147 @@ export default function EquipmentDetailsScreen() {
                     {isEditing ? <TextInput style={styles.editInput} value={equipmentData.name} onChangeText={t => setEquipmentData({...equipmentData, name: t})} /> : <Text style={styles.fieldValue}>{equipmentData.name}</Text>}
                   </View>
                   <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Meter</Text>
-                    <View style={styles.fieldValueRow}>
-                      {isEditing ? <TextInput style={styles.editInput} value={equipmentData.meter} onChangeText={t => setEquipmentData({...equipmentData, meter: t})} /> : <Text style={styles.fieldValue}>{equipmentData.meter}</Text>}
-                      {!isEditing && (
-                        <TouchableOpacity onPress={() => router.push(`/(manager)/equipments/meter-sync?id=${equipmentData.id}` as any)}>
-                          <Ionicons name="refresh" size={16} color="#0EA5E9" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                    <Text style={styles.fieldLabel}>Currently Assigned To</Text>
+                    <Text style={[styles.fieldValue, {fontWeight: '600', color: '#043094'}]}>{equipmentData.assignedTo}</Text>
                   </View>
-                  <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Status</Text>
-                    <View style={styles.fieldValueRow}>
-                      {isEditing ? <TextInput style={styles.editInput} value={equipmentData.status} onChangeText={t => setEquipmentData({...equipmentData, status: t})} /> : <View style={styles.statusBadge}><View style={styles.statusDot}/><Text style={styles.statusText}>{equipmentData.status}</Text></View>}
-                      {!isEditing && (
-                        <TouchableOpacity onPress={() => router.push(`/(manager)/equipments/history?id=${equipmentData.id}&type=status` as any)}>
-                          <Text style={styles.linkText}>History</Text>
-                        </TouchableOpacity>
-                      )}
+                  {currentEquipment.manualPhone && (
+                    <View style={styles.fieldRow}>
+                      <Text style={styles.fieldLabel}>Phone Number</Text>
+                      <Text style={styles.fieldValue}>{currentEquipment.manualPhone}</Text>
                     </View>
-                  </View>
+                  )}
+                  {currentEquipment.checkedOutAt && (
+                    <View style={styles.fieldRow}>
+                      <Text style={styles.fieldLabel}>Checked Out At</Text>
+                      <Text style={styles.fieldValue}>{new Date(currentEquipment.checkedOutAt).toLocaleString()}</Text>
+                    </View>
+                  )}
                   <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Group</Text>
+                    <Text style={styles.fieldLabel}>{t('equip_col_group', 'Group / Location')}</Text>
                     <View style={styles.fieldValueRow}>
                       <View>
                         {isEditing ? <TextInput style={styles.editInput} value={equipmentData.group} onChangeText={t => setEquipmentData({...equipmentData, group: t})} /> : <Text style={styles.fieldValue}>{equipmentData.group}</Text>}
-                        {!isEditing && <Text style={styles.fieldSubValue}>Alabama /</Text>}
                       </View>
-                      {!isEditing && (
-                        <TouchableOpacity onPress={() => router.push(`/(manager)/equipments/history?id=${equipmentData.id}&type=group` as any)}>
-                          <Text style={styles.linkText}>History</Text>
-                        </TouchableOpacity>
-                      )}
                     </View>
                   </View>
                   <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Operator</Text>
-                    {isEditing ? <TextInput style={styles.editInput} value={equipmentData.operator} onChangeText={t => setEquipmentData({...equipmentData, operator: t})} /> : <Text style={styles.fieldValue}>{equipmentData.operator}</Text>}
-                  </View>
-                  <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Type</Text>
+                    <Text style={styles.fieldLabel}>Type / Category</Text>
                     {isEditing ? <TextInput style={styles.editInput} value={equipmentData.type} onChangeText={t => setEquipmentData({...equipmentData, type: t})} /> : <Text style={[styles.fieldValue, {color: '#0EA5E9'}]}>{equipmentData.type}</Text>}
                   </View>
                   <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>VIN/SN</Text>
+                    <Text style={styles.fieldLabel}>Serial Number</Text>
                     <View style={styles.fieldValueRow}>
                       {isEditing ? <TextInput style={styles.editInput} value={equipmentData.serialNumber} onChangeText={t => setEquipmentData({...equipmentData, serialNumber: t})} /> : <Text style={styles.fieldValue}>{equipmentData.serialNumber}</Text>}
                     </View>
                   </View>
                   <View style={styles.fieldRow}>
-                    <Text style={styles.fieldLabel}>Year</Text>
-                    {isEditing ? <TextInput style={styles.editInput} value={equipmentData.year} onChangeText={t => setEquipmentData({...equipmentData, year: t})} /> : <Text style={styles.fieldValue}>{equipmentData.year}</Text>}
-                  </View>
-                  <View style={styles.fieldRow}>
                     <Text style={styles.fieldLabel}>Make</Text>
                     {isEditing ? <TextInput style={styles.editInput} value={equipmentData.make} onChangeText={t => setEquipmentData({...equipmentData, make: t})} /> : <Text style={styles.fieldValue}>{equipmentData.make}</Text>}
                   </View>
+                  <View style={styles.fieldRow}>
+                    <Text style={styles.fieldLabel}>Model</Text>
+                    {isEditing ? <TextInput style={styles.editInput} value={equipmentData.model} onChangeText={t => setEquipmentData({...equipmentData, model: t})} /> : <Text style={styles.fieldValue}>{equipmentData.model}</Text>}
+                  </View>
+                  <View style={styles.fieldRow}>
+                    <Text style={styles.fieldLabel}>Year</Text>
+                    {isEditing ? <TextInput style={styles.editInput} value={equipmentData.year} onChangeText={t => setEquipmentData({...equipmentData, year: t})} /> : <Text style={styles.fieldValue}>{equipmentData.year}</Text>}
+                  </View>
                 </View>
-              </View>
-
-              {/* Right Col - Charts */}
-              <View style={[styles.chartsCol, isLarge && { width: rightColWidth }]}>
-                {/* Cost of Ownership */}
-                {dashboardPrefs['Cost per Mile'] && (
-                  <View style={styles.card}>
-                    <View style={styles.cardHeaderRow}>
-                      <Text style={styles.cardTitle}>Cost of Ownership</Text>
-                      <TouchableOpacity style={styles.filterChip}><Ionicons name="calendar-outline" size={14} color="#0EA5E9" style={{marginRight: 6}} /><Text style={[styles.filterChipText, {color: '#0EA5E9'}]}>Last 12 Months</Text><Ionicons name="chevron-down" size={14} color="#0EA5E9" style={{marginLeft: 4}} /></TouchableOpacity>
-                    </View>
-                    
-                    <View style={styles.costMetricsRow}>
-                      <View style={styles.costMetric}>
-                        <Text style={styles.costLabel}>Total Costs</Text>
-                        <Text style={styles.costValue}>GH₵52,682.31</Text>
-                      </View>
-                      <View style={styles.costMetric}>
-                        <Text style={styles.costLabel}>Cost Per Meter</Text>
-                        <Text style={styles.costValue}>GH₵182.92 <Text style={{fontSize: 14, color: '#6B7280'}}>/ mi</Text></Text>
-                      </View>
-                    </View>
-
-                    <ResponsiveStackedBarChart
-                      stackData={costData}
-                      width={chartWidth}
-                      height={200}
-                    />
-                    
-                    <View style={styles.legendRow}>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#06b6d4'}]} /><View><Text style={styles.legendLabel}>Fuel Costs</Text><Text style={styles.legendValue}>GH₵51,877.27</Text></View></View>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#eab308'}]} /><View><Text style={styles.legendLabel}>Service Costs</Text><Text style={styles.legendValue}>GH₵590.53</Text></View></View>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#a855f7'}]} /><View><Text style={styles.legendLabel}>Other Costs</Text><Text style={styles.legendValue}>GH₵214.51</Text></View></View>
-                    </View>
-                  </View>
-                )}
-
-                {/* Utilization */}
-                {dashboardPrefs['Utilization'] && (
-                  <View style={styles.card}>
-                    <View style={styles.cardHeaderRow}>
-                      <Text style={styles.cardTitle}>Utilization</Text>
-                      <TouchableOpacity style={styles.filterChip}><Ionicons name="calendar-outline" size={14} color="#6B7280" style={{marginRight: 6}} /><Text style={styles.filterChipText}>All Time</Text><Ionicons name="chevron-down" size={14} color="#6B7280" style={{marginLeft: 4}} /></TouchableOpacity>
-                    </View>
-                    <ResponsiveBarChart
-                      data={utilData}
-                      width={chartWidth}
-                      height={200}
-                      color="#0ea5e9"
-                    />
-                  </View>
-                )}
               </View>
             </>
           )}
 
-          {activeTab === 'Specs' && (
-            <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 20, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20 }}>
-              <View style={[styles.cardHeaderRow, { marginBottom: 15 }]}>
-                <Text style={styles.cardTitle}>Equipment Specifications</Text>
-                {!isMedium && (
-                  <TouchableOpacity style={[styles.addBtn, { paddingHorizontal: 12 }]} onPress={() => setIsEditing(!isEditing)}>
-                    <Text style={styles.addBtnText}>{isEditing ? 'Save Specs' : 'Edit Specs'}</Text>
-                  </TouchableOpacity>
-                )}
+          {activeTab === 'Documents' && (
+            <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 20, borderWidth: 1, borderColor: '#E5E7EB' }}>
+              <View style={[styles.cardHeaderRow, {marginBottom: 15}]}>
+                <Text style={styles.cardTitle}>Manuals & Documents</Text>
+                <TouchableOpacity style={[styles.addBtn, {paddingHorizontal: 15, paddingVertical: 8}]} onPress={handleUploadDocument}>
+                  <Ionicons name="add" size={16} color="#fff" style={{marginRight: 4}} />
+                  <Text style={styles.addBtnText}>Upload</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Engine Size</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.engine} onChangeText={t => setEquipmentData({...equipmentData, engine: t})} /> : <Text style={styles.fieldValue}>{equipmentData.engine}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Transmission</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.transmission} onChangeText={t => setEquipmentData({...equipmentData, transmission: t})} /> : <Text style={styles.fieldValue}>{equipmentData.transmission}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Drive Type</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.drive} onChangeText={t => setEquipmentData({...equipmentData, drive: t})} /> : <Text style={styles.fieldValue}>{equipmentData.drive}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>GVWR</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.gvwr} onChangeText={t => setEquipmentData({...equipmentData, gvwr: t})} /> : <Text style={styles.fieldValue}>{equipmentData.gvwr}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Wheelbase</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.wheelbase} onChangeText={t => setEquipmentData({...equipmentData, wheelbase: t})} /> : <Text style={styles.fieldValue}>{equipmentData.wheelbase}</Text>}
-              </View>
-            </View>
-          )}
-
-          {activeTab === 'Financial' && (
-            <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 20, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20 }}>
-              <View style={[styles.cardHeaderRow, { marginBottom: 15 }]}>
-                <Text style={styles.cardTitle}>Financial Data</Text>
-                {!isMedium && (
-                  <TouchableOpacity style={[styles.addBtn, { paddingHorizontal: 12 }]} onPress={() => setIsEditing(!isEditing)}>
-                    <Text style={styles.addBtnText}>{isEditing ? 'Save Data' : 'Edit Data'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Purchase Price</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.purchasePrice} onChangeText={t => setEquipmentData({...equipmentData, purchasePrice: t})} /> : <Text style={styles.fieldValue}>{equipmentData.purchasePrice}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Purchase Date</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.purchaseDate} onChangeText={t => setEquipmentData({...equipmentData, purchaseDate: t})} /> : <Text style={styles.fieldValue}>{equipmentData.purchaseDate}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Current Value</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.currentValue} onChangeText={t => setEquipmentData({...equipmentData, currentValue: t})} /> : <Text style={styles.fieldValue}>{equipmentData.currentValue}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Loan/Lease</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.loan} onChangeText={t => setEquipmentData({...equipmentData, loan: t})} /> : <Text style={styles.fieldValue}>{equipmentData.loan}</Text>}
-              </View>
-            </View>
-          )}
-
-          {activeTab === 'Warranties' && (
-            <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 20, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20 }}>
-              <View style={[styles.cardHeaderRow, { marginBottom: 15 }]}>
-                <Text style={styles.cardTitle}>Warranties</Text>
-                {!isMedium && (
-                  <TouchableOpacity style={[styles.addBtn, { paddingHorizontal: 12 }]} onPress={() => setIsEditing(!isEditing)}>
-                    <Text style={styles.addBtnText}>{isEditing ? 'Save Warranties' : 'Edit Warranties'}</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Powertrain Warranty</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.powertrainWarranty} onChangeText={t => setEquipmentData({...equipmentData, powertrainWarranty: t})} /> : <Text style={styles.fieldValue}>{equipmentData.powertrainWarranty}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Powertrain Expires</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.powertrainExpires} onChangeText={t => setEquipmentData({...equipmentData, powertrainExpires: t})} /> : <Text style={styles.fieldValue}>{equipmentData.powertrainExpires}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Bumper to Bumper</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.bumperToBumper} onChangeText={t => setEquipmentData({...equipmentData, bumperToBumper: t})} /> : <Text style={styles.fieldValue}>{equipmentData.bumperToBumper}</Text>}
-              </View>
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldLabel}>Bumper Expires</Text>
-                {isEditing ? <TextInput style={styles.editInput} value={equipmentData.bumperExpires} onChangeText={t => setEquipmentData({...equipmentData, bumperExpires: t})} /> : <Text style={styles.fieldValue}>{equipmentData.bumperExpires}</Text>}
-              </View>
-
-              {dashboardPrefs['Documents'] && (
-                <View style={{ marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#E5E7EB' }}>
-                  <Text style={[styles.cardTitle, { fontSize: 16, marginBottom: 12 }]}>Attached Documents</Text>
-                  
-                  {documents.map((doc) => (
-                    <View key={doc.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#F9FAFB', padding: 12, borderRadius: 8, marginBottom: 12, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                        <Ionicons name="document-text" size={24} color="#0EA5E9" style={{ marginRight: 12 }} />
-                        <View>
-                          <Text style={{ fontSize: 14, color: '#111827', fontWeight: '500' }}>{doc.name}</Text>
-                          <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{doc.size} • {doc.date}</Text>
-                        </View>
-                      </View>
-                      <TouchableOpacity 
-                        style={{ padding: 6, backgroundColor: isEditing ? '#FEE2E2' : 'transparent', borderRadius: 6 }}
-                        onPress={() => {
-                          if (isEditing) {
-                            setDocuments(documents.filter(d => d.id !== doc.id));
-                          } else {
-                            alert('Downloading document...');
-                          }
-                        }}
-                      >
-                        <Ionicons name={isEditing ? "trash-outline" : "download-outline"} size={20} color={isEditing ? "#EF4444" : "#6B7280"} />
-                      </TouchableOpacity>
+              {documents.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#6B7280', marginVertical: 30 }}>No documents uploaded.</Text>
+              ) : (
+                documents.map(doc => (
+                  <View key={doc.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
+                    <Ionicons name="document-text" size={24} color="#6B7280" style={{ marginRight: 15 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '500', color: '#111827' }}>{doc.name}</Text>
+                      <Text style={{ fontSize: 12, color: '#6B7280' }}>{doc.size} • Uploaded {doc.date}</Text>
                     </View>
-                  ))}
-
-                  {isEditing && (
-                    <TouchableOpacity 
-                      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F3F4F6', padding: 14, borderRadius: 8, borderWidth: 1, borderColor: '#D1D5DB', borderStyle: 'dashed' }} 
-                      onPress={handleUploadDocument}
-                    >
-                      <Ionicons name="cloud-upload-outline" size={20} color="#4B5563" style={{ marginRight: 8 }} />
-                      <Text style={{ fontSize: 14, color: '#4B5563', fontWeight: '600' }}>Upload Document</Text>
+                    <TouchableOpacity>
+                      <Ionicons name="download-outline" size={20} color="#043094" />
                     </TouchableOpacity>
-                  )}
-                </View>
+                  </View>
+                ))
               )}
             </View>
           )}
-
-          {activeTab !== 'Overview' && activeTab !== 'Specs' && activeTab !== 'Financial' && activeTab !== 'Warranties' && (
-            <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 8, padding: 40, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E5E7EB', height: 400 }}>
-              <Ionicons name="folder-open-outline" size={48} color="#D1D5DB" style={{marginBottom: 10}} />
-              <Text style={{fontSize: 16, color: '#6B7280', fontWeight: '500'}}>No {activeTab} data available yet.</Text>
-            </View>
-          )}
-
+          
         </View>
       </ScrollView>
 
-      {/* Edit Labels Modal */}
-      <Modal visible={labelsModalVisible} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={styles.modalTitle}>Edit Equipment Labels</Text>
-              <TouchableOpacity onPress={() => setLabelsModalVisible(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
+      {/* Web Image Upload Modal */}
+      {Platform.OS === 'web' && imagePickerModalVisible && (
+        <Modal transparent={true} visible={imagePickerModalVisible} animationType="fade">
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setImagePickerModalVisible(false)}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Upload Equipment Image</Text>
+              <input type="file" accept="image/*" onChange={handleWebImageUpload} style={{ marginTop: 20 }} />
+              <TouchableOpacity style={[styles.cancelBtn, { marginTop: 20 }]} onPress={() => setImagePickerModalVisible(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-            
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 }}>
-              {labels.map((lbl, idx) => (
-                <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E0E7FF', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, marginRight: 8, marginBottom: 8 }}>
-                  <Text style={{ color: '#3730A3', fontSize: 13, fontWeight: '500', marginRight: 5 }}>{lbl}</Text>
-                  <TouchableOpacity onPress={() => removeLabel(idx)}>
-                    <Ionicons name="close-circle" size={16} color="#3730A3" />
-                  </TouchableOpacity>
-                </View>
-              ))}
-              {labels.length === 0 && <Text style={{ color: '#9CA3AF', fontStyle: 'italic' }}>No labels added.</Text>}
-            </View>
-
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TextInput
-                style={{ flex: 1, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: 10, marginRight: 10 }}
-                placeholder="Add a new label..."
-                value={newLabel}
-                onChangeText={setNewLabel}
-              />
-              <TouchableOpacity style={styles.addBtn} onPress={handleAddLabel}>
-                <Text style={styles.addBtnText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Personalize Modal */}
-      <Modal visible={personalizeVisible} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { width: 320 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-              <Text style={styles.modalTitle}>Personalize Dashboard</Text>
-              <TouchableOpacity onPress={() => setPersonalizeVisible(false)}>
-                <Ionicons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={{ color: '#4B5563', marginBottom: 20 }}>Toggle the sections you want to see on this dashboard:</Text>
-            
-            <View style={{ marginBottom: 15 }}>
-              {(Object.keys(dashboardPrefs) as (keyof typeof dashboardPrefs)[]).map((section, idx) => (
-                <View key={idx} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }}>
-                  <Text style={{ fontSize: 16, color: '#111827' }}>{section}</Text>
-                  <TouchableOpacity onPress={() => togglePref(section)}>
-                    <Ionicons 
-                      name={dashboardPrefs[section] ? "toggle" : "toggle-outline"} 
-                      size={32} 
-                      color={dashboardPrefs[section] ? "#10B981" : "#9CA3AF"} 
-                    />
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-            
-            <TouchableOpacity style={[styles.addBtn, { justifyContent: 'center', paddingVertical: 12 }]} onPress={() => setPersonalizeVisible(false)}>
-              <Text style={styles.addBtnText}>Save Preferences</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Image Picker Modal */}
-      <Modal visible={imagePickerModalVisible} transparent={true} animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setImagePickerModalVisible(false)}>
-          <View style={[styles.modalContent, { width: 300 }]}>
-            <Text style={styles.modalTitle}>Update Equipment Photo</Text>
-            
-            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' }} onPress={handleTakePhoto}>
-              <Ionicons name="camera-outline" size={24} color="#0EA5E9" />
-              <Text style={{ fontSize: 16, color: '#374151', marginLeft: 12 }}>Take Photo</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15 }} onPress={handleChooseFromLibrary}>
-              <Ionicons name="image-outline" size={24} color="#10B981" />
-              <Text style={{ fontSize: 16, color: '#374151', marginLeft: 12 }}>Choose from Library</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  header: { backgroundColor: '#fff', padding: 20, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   backBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  backText: { fontSize: 14, color: '#4B5563', marginLeft: 4, fontWeight: '500' },
+  backText: { fontSize: 14, color: '#4B5563', marginLeft: 6, fontWeight: '500' },
   headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  headerLeft: { flexDirection: 'row' },
-  equipmentImg: { width: 80, height: 80, borderRadius: 8, marginRight: 20 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#6B7280', marginBottom: 8 },
-  badgesRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  metaText: { fontSize: 13, color: '#4B5563', marginRight: 8 },
-  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', marginRight: 8 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, marginRight: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  equipmentImg: { width: 100, height: 100, borderRadius: 12, marginRight: 20 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  subtitle: { fontSize: 14, color: '#6B7280', marginBottom: 10 },
+  badgesRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+  metaText: { fontSize: 13, color: '#4B5563' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D1FAE5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
   statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981', marginRight: 6 },
-  statusText: { fontSize: 12, fontWeight: '600', color: '#10B981' },
-  editLabelsBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  editLabelsText: { fontSize: 12, color: '#4B5563', fontWeight: '500' },
-  headerRight: { flexDirection: 'row', alignItems: 'center' },
-  avatarCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#EC4899', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  avatarText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  iconBtn: { padding: 8, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, marginRight: 10 },
-  watchBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6, marginRight: 10 },
-  watchText: { fontSize: 13, color: '#4B5563', fontWeight: '500' },
-  editBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 6, marginRight: 10 },
-  editText: { fontSize: 13, color: '#374151', fontWeight: '600' },
-  addBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#10B981', borderRadius: 6 },
-  addBtnText: { fontSize: 13, color: '#fff', fontWeight: '600' },
-  tabsContainer: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingHorizontal: 20 },
-  tabsScroll: { flexDirection: 'row' },
-  tab: { paddingVertical: 14, marginRight: 24, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: '#0EA5E9' },
-  tabText: { fontSize: 14, color: '#6B7280', fontWeight: '600' },
-  activeTabText: { color: '#0EA5E9' },
-  personalizeBtn: { flexDirection: 'row', alignItems: 'center', paddingLeft: 20, borderLeftWidth: 1, borderLeftColor: '#E5E7EB' },
-  personalizeText: { fontSize: 13, color: '#4B5563', fontWeight: '500' },
-  contentScroll: { flex: 1, backgroundColor: '#F3F4F6' },
-  content: { padding: 20 },
-  grid: { flexDirection: 'row' },
-  detailsCol: {},
-  chartsCol: {},
-  card: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 15 },
-  sectionHeader: { fontSize: 14, fontWeight: '700', color: '#111827', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', marginBottom: 10 },
-  fieldRow: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
-  fieldLabel: { width: '40%', fontSize: 14, color: '#6B7280' },
-  fieldValue: { fontSize: 14, color: '#111827' },
-  fieldSubValue: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
-  fieldValueRow: { flexDirection: 'row', justifyContent: 'space-between', flex: 1, alignItems: 'center' },
-  linkText: { fontSize: 13, color: '#0EA5E9', fontWeight: '500' },
+  statusText: { fontSize: 12, color: '#065F46', fontWeight: '600' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB' },
+  editText: { fontSize: 14, fontWeight: '500', color: '#374151' },
+  tabsContainer: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  tabsScroll: { paddingHorizontal: 20 },
+  tab: { paddingVertical: 15, marginRight: 20, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  activeTab: { borderBottomColor: '#043094' },
+  tabText: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  activeTabText: { color: '#043094', fontWeight: '600' },
+  contentScroll: { flex: 1 },
+  content: { padding: 20, paddingBottom: 60 },
+  grid: { flexDirection: 'row', gap: 20 },
+  detailsCol: { flex: 1 },
+  card: { backgroundColor: '#fff', borderRadius: 8, padding: 20, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20 },
   cardHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  filterChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 6 },
-  filterChipText: { fontSize: 12, color: '#4B5563', fontWeight: '600' },
-  costMetricsRow: { flexDirection: 'row', marginBottom: 20 },
-  costMetric: { flex: 1, borderRightWidth: 1, borderRightColor: '#F3F4F6', paddingRight: 20 },
-  costLabel: { fontSize: 13, color: '#6B7280', marginBottom: 8 },
-  costValue: { fontSize: 28, fontWeight: 'bold', color: '#111827' },
-  chart: { marginTop: 10, marginLeft: -10 },
-  legendRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#F3F4F6' },
-  legendItem: { flexDirection: 'row' },
-  legendDot: { width: 8, height: 8, borderRadius: 4, marginTop: 4, marginRight: 8 },
-  legendLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-  legendValue: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  editInput: { flex: 1, backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 6, paddingHorizontal: 12, paddingVertical: 8, fontSize: 14, color: '#111827', outlineStyle: 'none' as any },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
+  fieldRow: { flexDirection: 'row', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  fieldLabel: { width: 150, fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  fieldValueRow: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  fieldValue: { flex: 1, fontSize: 14, color: '#111827', fontWeight: '500' },
+  editInput: { flex: 1, fontSize: 14, color: '#111827', fontWeight: '500', backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 4 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#043094', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
+  addBtnText: { color: '#fff', fontSize: 14, fontWeight: '500' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', borderRadius: 12, width: '90%', maxWidth: 400, padding: 20, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 5 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' }
+  modalContent: { width: '90%', maxWidth: 400, backgroundColor: '#fff', borderRadius: 12, padding: 20 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 15 },
+  cancelBtn: { padding: 12, borderRadius: 8, backgroundColor: '#F3F4F6', alignItems: 'center' },
+  cancelBtnText: { color: '#4B5563', fontWeight: '600' }
 });
-

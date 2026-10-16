@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Alert, Platform, Modal, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
@@ -41,12 +41,52 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
           <Ionicons name="chevron-down" size={16} color="#9CA3AF" style={styles.selectIcon} />
         </TouchableOpacity>
       ) : isDate ? (
-        <TouchableOpacity style={styles.inputContainer} onPress={() => setDatePickerVisibility(true)}>
-          <Text style={[styles.input, { paddingTop: 10 }, !value && { color: '#9CA3AF' }]}>
-            {value || placeholder}
-          </Text>
-          <Ionicons name="calendar-outline" size={16} color="#9CA3AF" style={styles.selectIcon} />
-        </TouchableOpacity>
+        Platform.OS === 'web' ? (
+          <View style={styles.inputContainer}>
+            <input 
+              type="date"
+              value={(() => {
+                if (!value) return '';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+                const parts = value.split('/');
+                if (parts.length === 3) {
+                  return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                }
+                return value;
+              })()}
+              onChange={(e) => {
+                if (onChangeText) {
+                  const val = e.target.value;
+                  if (!val) {
+                    onChangeText('');
+                    return;
+                  }
+                  const [y, m, d] = val.split('-');
+                  onChangeText(`${parseInt(m, 10)}/${parseInt(d, 10)}/${y}`);
+                }
+              }}
+              onClick={(e) => (e.target as any).showPicker && (e.target as any).showPicker()}
+              style={{
+                flex: 1,
+                border: 'none',
+                backgroundColor: 'transparent',
+                outline: 'none',
+                padding: '10px 14px',
+                fontSize: 14,
+                fontFamily: 'inherit',
+                color: value ? '#111827' : '#9CA3AF',
+                cursor: 'pointer'
+              }}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.inputContainer} onPress={() => setDatePickerVisibility(true)}>
+            <Text style={[styles.input, { paddingTop: 10 }, !value && { color: '#9CA3AF' }]}>
+              {value || placeholder}
+            </Text>
+            <Ionicons name="calendar-outline" size={16} color="#9CA3AF" style={styles.selectIcon} />
+          </TouchableOpacity>
+        )
       ) : (
         <View style={styles.inputContainer}>
           <TextInput 
@@ -93,7 +133,7 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
         </Modal>
       )}
 
-      {isDate && (
+      {isDate && Platform.OS !== 'web' && (
         <DateTimePickerModal
           isVisible={isDatePickerVisible}
           mode="date"
@@ -107,6 +147,7 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
 
 export default function AddVehicleScreen() {
   const router = useRouter();
+  const { plate: initialPlate } = useLocalSearchParams<{ plate?: string }>();
   const { addVehicle } = useVehicles();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024; // Use mobile layout for small tablets (<1024px)
@@ -114,7 +155,9 @@ export default function AddVehicleScreen() {
   const [warrantyModalVisible, setWarrantyModalVisible] = useState(false);
   const [profileImageModalVisible, setProfileImageModalVisible] = useState(false);
   const [form, setForm] = useState({
-    profileImage: '', name: '', telematics: '', vin: '', plate: '', type: '', fuelType: '', 
+    profileImage: '', name: '', telematics: '', vin: '', 
+    plate: (typeof initialPlate === 'string' ? initialPlate : '') || '', 
+    type: '', fuelType: '', 
     year: '', make: '', model: '', trim: '', state: '', labels: '',
     primaryMeter: '', currentMeter: '', maintenanceProgram: '',
     inServiceDate: '', serviceLife: '', resaleValue: '',
@@ -123,6 +166,12 @@ export default function AddVehicleScreen() {
     licenseReq: '', specialEquip: '',
     engineSize: '', transmission: '', driveType: '', gvwr: ''
   });
+
+  React.useEffect(() => {
+    if (initialPlate && typeof initialPlate === 'string') {
+      setForm(prev => ({ ...prev, plate: initialPlate }));
+    }
+  }, [initialPlate]);
 
   const handlePickProfileImage = async (useCamera: boolean) => {
     setProfileImageModalVisible(false);
@@ -251,9 +300,10 @@ export default function AddVehicleScreen() {
   };
 
   const handleSave = () => {
-    if (!form.name) {
-      if (Platform.OS === 'web') window.alert("Please enter a vehicle name.");
-      else Alert.alert("Error", "Please enter a vehicle name.");
+    if (!form.name || !form.plate || !form.year || !form.make || !form.model) {
+      const msg = "Please fill out all required fields: Vehicle Name, License Plate, Year, Make, and Model.";
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert("Error", msg);
       return;
     }
     
@@ -390,6 +440,7 @@ export default function AddVehicleScreen() {
               
               <FormField 
                 label="License Plate" 
+                required={true}
                 value={form.plate}
                 onChangeText={(t: string) => setForm({...form, plate: t})}
               />
@@ -422,6 +473,7 @@ export default function AddVehicleScreen() {
                 <View style={styles.thirdCol}>
                   <FormField 
                     label="Year" 
+                    required={true}
                     value={form.year}
                     onChangeText={(t: string) => setForm({...form, year: t})}
                     placeholder="e.g. 2012" 
@@ -430,6 +482,7 @@ export default function AddVehicleScreen() {
                 <View style={styles.thirdCol}>
                   <FormField 
                     label="Make" 
+                    required={true}
                     isSelect={true} 
                     options={['Toyota', 'Ford', 'Chevrolet', 'GMC', 'Freightliner', 'Volvo', 'Kenworth']}
                     value={form.make}
@@ -441,6 +494,7 @@ export default function AddVehicleScreen() {
                 <View style={styles.thirdCol}>
                   <FormField 
                     label="Model" 
+                    required={true}
                     isSelect={true} 
                     options={['Corolla', 'Camry', 'F-150', 'Silverado', 'Cascadia', 'VNL', 'T680']}
                     value={form.model}

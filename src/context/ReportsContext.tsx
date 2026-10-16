@@ -21,6 +21,7 @@ type ReportsContextType = {
   loading: boolean;
   addReport: (report: Omit<Report, 'id'>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
+  updateLastRun: (id: string, timestamp?: string) => Promise<void>;
   refreshReports: () => Promise<void>;
 };
 
@@ -71,8 +72,24 @@ export function ReportsProvider({ children }: { children: React.ReactNode }) {
     await supabase.from('reports').delete().eq('id', id);
   };
 
+  const updateLastRun = async (id: string, timestamp?: string) => {
+    const nowStr = timestamp || new Date().toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    setReports(prev => prev.map(r => r.id === id ? { ...r, lastRun: nowStr } : r));
+    try {
+      await supabase.from('reports').update({ last_run: nowStr }).eq('id', id);
+    } catch (e) {
+      console.error('Error updating last_run:', e);
+    }
+  };
+
   return (
-    <ReportsContext.Provider value={{ reports, loading, addReport, deleteReport, refreshReports: fetchReports }}>
+    <ReportsContext.Provider value={{ reports, loading, addReport, deleteReport, updateLastRun, refreshReports: fetchReports }}>
       {children}
     </ReportsContext.Provider>
   );

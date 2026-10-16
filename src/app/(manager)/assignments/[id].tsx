@@ -2,49 +2,61 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
-// Mock detailed driver assignment data
-const MOCK_DRIVER_DETAIL = {
-  id: '1',
-  driverName: 'John Doe',
-  driverImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
-  licenseNumber: 'DL-987654321',
-  licenseExp: '2026-05-14',
-  vehicleAssigned: 'Toyota Sienna (ABC-9876)',
-  status: 'In Progress',
-  currentAssignment: {
-    id: 'curr1',
-    route: 'Accra Central to Osu',
-    time: '03:00 PM - 07:00 PM',
-    stops: 12,
-    completedStops: 4,
-    notes: 'Handle with care for stops 3 and 4.',
-  },
-  completedAssignments: [
-    { id: 'c1', date: 'Oct 26, 2024', route: 'Tema Port to Ashaiman', time: '08:00 AM - 12:00 PM', stops: 8 },
-    { id: 'c2', date: 'Oct 25, 2024', route: 'Dansoman to Circle', time: '09:00 AM - 02:00 PM', stops: 15 },
-    { id: 'c3', date: 'Oct 24, 2024', route: 'Kumasi Highway Express', time: '06:00 AM - 06:00 PM', stops: 2 },
-  ]
-};
+import { useAssignments } from '../../../context/AssignmentsContext';
 
 export default function AssignmentDetailScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024;
+  const { assignments } = useAssignments();
 
-  // In a real app, you would fetch the data based on 'id'
-  const data = MOCK_DRIVER_DETAIL; 
+  const assignment = assignments.find(a => a.id === id);
+
+  if (!assignment) {
+    return <View style={styles.container}><Text style={{padding:20}}>{t('common_loading', 'Loading...')}</Text></View>;
+  }
+
+  const driverAssignments = assignments.filter(a => a.driverId === assignment.driverId && a.id !== id);
+  const completedAssignments = driverAssignments.filter(a => a.status === 'Completed').map(a => ({
+    id: a.id,
+    date: a.date,
+    route: t('assign_route_format', '{{pickup}} to {{dropoff}}', { pickup: a.pickupLocation, dropoff: a.dropoffLocation }),
+    time: `${a.startTime} - ${a.endTime}`,
+    stops: 1
+  }));
+
+  const data = {
+    id: assignment.id,
+    driverName: assignment.driverName || t('common_unassigned', 'Unassigned'),
+    driverImage: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=150&h=150',
+    licenseNumber: t('common_pending', 'Pending...'),
+    licenseExp: t('common_pending', 'Pending...'),
+    vehicleAssigned: assignment.vehicle,
+    status: assignment.status,
+    currentAssignment: {
+      id: assignment.id,
+      route: t('assign_route_format', '{{pickup}} to {{dropoff}}', { pickup: assignment.pickupLocation, dropoff: assignment.dropoffLocation }),
+      time: `${assignment.startTime} - ${assignment.endTime}`,
+      stops: 1,
+      completedStops: assignment.status === 'Completed' ? 1 : 0,
+      notes: assignment.notes || t('assign_no_notes', 'No notes provided.'),
+    },
+    completedAssignments
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={20} color="#6B7280" />
-          <Text style={styles.backBtnText}>Back to Assignments</Text>
+          <Text style={styles.backBtnText}>{t('assign_back', 'Back to Assignments')}</Text>
         </TouchableOpacity>
         <View style={[styles.statusBadge, { backgroundColor: '#DBEAFE' }]}>
-          <Text style={[styles.statusText, { color: '#1D4ED8' }]}>{data.status}</Text>
+          <Text style={[styles.statusText, { color: '#1D4ED8' }]}>{t(`assign_status_${data.status.toLowerCase().replace(' ', '_')}`, data.status)}</Text>
         </View>
       </View>
 
@@ -53,7 +65,7 @@ export default function AssignmentDetailScreen() {
           <Image source={{ uri: data.driverImage }} style={styles.profileAvatar} />
           <View style={styles.profileTitleContainer}>
             <Text style={styles.profileName}>{data.driverName}</Text>
-            <Text style={styles.profileSubtitle}>License: {data.licenseNumber} (Exp: {data.licenseExp})</Text>
+            <Text style={styles.profileSubtitle}>{t('driver_lbl_license_prefix', 'License: ')}{data.licenseNumber} ({t('driver_lbl_exp_prefix', 'Expires: ')}{data.licenseExp})</Text>
           </View>
           <View style={[styles.vehicleBadge, isMobile && { marginTop: 15 }]}>
             <Ionicons name="car" size={20} color="#043094" />
@@ -62,7 +74,7 @@ export default function AssignmentDetailScreen() {
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>Current Assignment</Text>
+      <Text style={styles.sectionTitle}>{t('assign_current_title', 'Current Assignment')}</Text>
       <TouchableOpacity 
         style={styles.currentAssignmentCard}
         onPress={() => router.push({ pathname: '/(manager)/assignments/task/[taskId]', params: { taskId: data.currentAssignment.id } })}
@@ -82,8 +94,8 @@ export default function AssignmentDetailScreen() {
         
         <View style={styles.progressContainer}>
           <View style={styles.progressTextRow}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressValue}>{data.currentAssignment.completedStops} of {data.currentAssignment.stops} Stops</Text>
+            <Text style={styles.progressLabel}>{t('assign_progress', 'Progress')}</Text>
+            <Text style={styles.progressValue}>{t('assign_stops_progress', '{{completed}} of {{total}} Stops', { completed: data.currentAssignment.completedStops, total: data.currentAssignment.stops })}</Text>
           </View>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: `${(data.currentAssignment.completedStops / data.currentAssignment.stops) * 100}%` }]} />
@@ -96,7 +108,7 @@ export default function AssignmentDetailScreen() {
         </View>
       </TouchableOpacity>
 
-      <Text style={styles.sectionTitle}>Completed Assignments</Text>
+      <Text style={styles.sectionTitle}>{t('assign_completed_title', 'Completed Assignments')}</Text>
       <View style={styles.completedCard}>
         {data.completedAssignments.map((assignment, index) => (
           <TouchableOpacity 
@@ -110,7 +122,7 @@ export default function AssignmentDetailScreen() {
             </View>
             <View style={styles.completedInfoCol}>
               <Text style={styles.completedRoute}>{assignment.route}</Text>
-              <Text style={styles.completedDetails}>{assignment.time} • {assignment.stops} Stops</Text>
+              <Text style={styles.completedDetails}>{assignment.time} • {t('assign_stops_count', '{{count}} Stops', { count: assignment.stops })}</Text>
             </View>
             <View style={styles.completedStatusCol}>
               <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />

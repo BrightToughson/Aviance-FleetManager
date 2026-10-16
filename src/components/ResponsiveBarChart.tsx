@@ -19,16 +19,20 @@ export default function ResponsiveBarChart({ data, width, height, color = '#10B9
       width={chartWidth}
       height={height}
       frontColor={color}
-      barWidth={20}
+      barWidth={22}
       spacing={spacing}
-      initialSpacing={10}
+      initialSpacing={14}
       yAxisColor="#E5E7EB"
       xAxisColor="#E5E7EB"
-      yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }}
-      xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10 }}
-      rulesColor="#F3F4F6"
+      yAxisTextStyle={{ color: '#94A3B8', fontSize: 10, fontWeight: '500' }}
+      xAxisLabelTextStyle={{ color: '#64748B', fontSize: 10, fontWeight: '600' }}
+      rulesColor="#F1F5F9"
       hideRules={false}
-      isAnimated={false}
+      roundedTop={true}
+      showGradient={true}
+      gradientColor="#34D399"
+      isAnimated={true}
+      animationDuration={850}
     />
   );
 }

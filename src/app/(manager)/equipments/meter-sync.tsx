@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Platform, Animated } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export default function MeterSyncScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState('Oct 25, 2026 - 14:00');
   const [currentMeter, setCurrentMeter] = useState(12430);
@@ -28,7 +30,7 @@ export default function MeterSyncScreen() {
     setTimeout(() => {
       setSyncing(false);
       rotation.stopAnimation();
-      setLastSync('Just now');
+      setLastSync(t('common_just_now', 'Just now'));
       setCurrentMeter(prev => prev + Math.floor(Math.random() * 50) + 10);
     }, 2500);
   };
@@ -44,24 +46,24 @@ export default function MeterSyncScreen() {
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.title}>Telematics Sync</Text>
+        <Text style={styles.title}>{t('equip_sync_title', 'Telematics Sync')}</Text>
       </View>
       
       <View style={styles.content}>
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="hardware-chip-outline" size={24} color="#0EA5E9" />
-            <Text style={styles.cardTitle}>Telematics Device Status</Text>
+            <Text style={styles.cardTitle}>{t('equip_sync_device_status', 'Telematics Device Status')}</Text>
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
-              <Text style={styles.statusText}>Connected</Text>
+              <Text style={styles.statusText}>{t('equip_sync_connected', 'Connected')}</Text>
             </View>
           </View>
           
           <View style={styles.meterDisplay}>
-            <Text style={styles.meterLabel}>Current Reading</Text>
-            <Text style={styles.meterValue}>{currentMeter.toLocaleString()} <Text style={styles.unit}>hrs</Text></Text>
-            <Text style={styles.lastSync}>Last synced: {lastSync}</Text>
+            <Text style={styles.meterLabel}>{t('equip_sync_reading', 'Current Reading')}</Text>
+            <Text style={styles.meterValue}>{currentMeter.toLocaleString()} <Text style={styles.unit}>{t('equip_sync_hrs', 'hrs')}</Text></Text>
+            <Text style={styles.lastSync}>{t('equip_sync_last_synced', 'Last synced')}: {lastSync}</Text>
           </View>
 
           <TouchableOpacity 
@@ -78,7 +80,7 @@ export default function MeterSyncScreen() {
               <Ionicons name="cloud-download-outline" size={20} color="#fff" />
             )}
             <Text style={styles.syncBtnText}>
-              {syncing ? 'Fetching from Device...' : 'Sync Now'}
+              {syncing ? t('equip_syncing', 'Fetching from Device...') : t('equip_sync_now', 'Sync Now')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -86,7 +88,7 @@ export default function MeterSyncScreen() {
         <View style={styles.infoBox}>
           <Ionicons name="information-circle" size={20} color="#3B82F6" style={{marginTop: 2}} />
           <Text style={styles.infoText}>
-            Telematics devices automatically sync every 4 hours. Use this manual sync if you need the real-time reading for maintenance or check-out workflows.
+            {t('equip_sync_info', 'Telematics devices automatically sync every 4 hours. Use this manual sync if you need the real-time reading for maintenance or check-out workflows.')}
           </Text>
         </View>
       </View>

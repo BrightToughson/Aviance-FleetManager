@@ -1,9 +1,14 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Platform, KeyboardAvoidingView, Vibration } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useAlerts } from '../../context/AlertsContext';
+import { useTranslation } from 'react-i18next';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { supabase } from '../../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '@clerk/expo';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -16,13 +21,50 @@ Notifications.setNotificationHandler({
 });
 
 export default function RemindersScreen() {
+  const router = useRouter();
   const { addAlert } = useAlerts();
-  const [reminders, setReminders] = useState([
-    { id: '1', title: 'CDL License Renewal', dueDate: 'Nov 15, 2026', daysLeft: 22, type: 'Document', icon: 'document-text', status: 'active', description: '' },
-    { id: '2', title: 'Medical Certificate', dueDate: 'Dec 01, 2026', daysLeft: 38, type: 'Document', icon: 'medkit', status: 'active', description: '' },
-    { id: '3', title: 'Mandatory Safety Training', dueDate: 'Oct 30, 2026', daysLeft: 6, type: 'Training', icon: 'school', status: 'ignored', description: '' },
-    { id: '4', title: 'Vehicle Scheduled Service', dueDate: 'Oct 28, 2026', daysLeft: 4, type: 'Maintenance', icon: 'construct', status: 'completed', description: '' },
-  ]);
+  const { t } = useTranslation();
+  const { user } = useUser();
+  const [reminders, setReminders] = useState<any[]>([]);
+
+  const fetchReminders = async () => {
+    if (!user?.id) {
+      setReminders([]);
+      return;
+    }
+    try {
+      const stored = await AsyncStorage.getItem(`@manager_reminders_${user.id}`);
+      if (stored) {
+        setReminders(JSON.parse(stored));
+      } else {
+        setReminders([]);
+      }
+    } catch (e) {
+      console.error('Error fetching manager reminders:', e);
+      setReminders([]);
+    }
+  };
+
+  const persistReminders = async (updated: any[]) => {
+    setReminders(updated);
+    if (user?.id) {
+      try {
+        await AsyncStorage.setItem(`@manager_reminders_${user.id}`, JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving manager reminders:', e);
+      }
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchReminders();
+    }, [user?.id])
+  );
+
+  useEffect(() => {
+    fetchReminders();
+  }, [user?.id]);
 
   const [activeTab, setActiveTab] = useState('All');
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -93,9 +135,10 @@ export default function RemindersScreen() {
     };
   }, []);
 
-  const handleAlarmResponse = (id: string, newStatus: string) => {
+  const handleAlarmResponse = async (id: string, newStatus: string) => {
     stopAlarmSound();
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, status: newStatus } : r));
+    const updated = reminders.map(r => r.id === id ? { ...r, status: newStatus } : r);
+    persistReminders(updated);
     setActiveAlarm(null);
   };
 
@@ -160,15 +203,52 @@ export default function RemindersScreen() {
     return '#10B981'; // Green
   };
 
+  const handleDeleteReminder = (id: string) => {
+    const performDelete = async () => {
+      const updated = reminders.filter(r => r.id !== id);
+      persistReminders(updated);
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to delete this reminder?')) {
+        performDelete();
+      }
+    } else {
+      Alert.alert(
+        'Delete Reminder',
+        'Are you sure you want to delete this reminder?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: performDelete }
+        ]
+      );
+    }
+  };
+
   const handleClearAll = () => {
-    Alert.alert(
-      'Clear Reminders',
-      'Are you sure you want to clear all reminders?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: () => setReminders([]) }
-      ]
-    );
+    if (reminders.length === 0) return;
+
+    const performClear = async () => {
+      setReminders([]);
+      if (user?.id) {
+        await AsyncStorage.removeItem(`@manager_reminders_${user.id}`).catch(console.error);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to clear all reminders?')) {
+        performClear();
+      }
+    } else {
+      Alert.alert(
+        'Clear Reminders',
+        'Are you sure you want to clear all reminders?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear All', style: 'destructive', onPress: performClear }
+        ]
+      );
+    }
   };
 
   const handleAddReminder = async () => {
@@ -212,7 +292,7 @@ export default function RemindersScreen() {
       description: newDescription,
       dueDate: dueDateStr,
       daysLeft: isScheduled ? Math.max(1, Math.ceil(timeDiff / (60 * 60 * 24))) : 0,
-      type: 'Personal',
+      type: 'Task',
       icon: 'alarm',
       status: 'active',
       timestamp: finalDate.getTime(),
@@ -221,40 +301,46 @@ export default function RemindersScreen() {
     };
 
     if (editingId) {
-      setReminders(reminders.map(r => r.id === editingId ? { ...r, ...newRem } : r));
+      const updated = reminders.map(r => r.id === editingId ? { ...r, ...newRem } : r);
+      persistReminders(updated);
     } else {
-      setReminders([newRem, ...reminders]);
+      const updated = [newRem, ...reminders];
+      persistReminders(updated);
       addAlert(`New Reminder: ${newTitle}`, `You have set a reminder for ${dueDateStr}`, 'reminder');
     }
     
     closeModal();
 
     if (isScheduled) {
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow notifications to receive alerts.');
-        return;
+      if (Platform.OS !== 'web') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission needed', 'Please allow notifications to receive alerts.');
+          return;
+        }
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `Manager Reminder: ${newTitle}`,
+            body: newDescription ? newDescription : `Due: ${dueDateStr}`,
+            sound: true,
+            categoryIdentifier: 'REMINDER_ALARM',
+            priority: Notifications.AndroidNotificationPriority.MAX,
+            interruptionLevel: 'timeSensitive',
+            data: { reminderId: newRem.id, title: newTitle },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+            seconds: Math.floor(timeDiff),
+          },
+        });
       }
 
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Manager Reminder: ${newRem.title}`,
-          body: newDescription ? newDescription : `Due: ${newRem.dueDate}`,
-          sound: true,
-          categoryIdentifier: 'REMINDER_ALARM',
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          interruptionLevel: 'timeSensitive',
-          data: { reminderId: newRem.id, title: newRem.title },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds: Math.floor(timeDiff),
-        },
-      });
-
-      Alert.alert(editingId ? 'Reminder Updated!' : 'Reminder Set!', `An alert has been scheduled for ${newRem.dueDate}.`);
+      if (Platform.OS === 'web') window.alert(editingId ? 'Reminder Updated!' : 'Reminder Set! An alert has been scheduled for ' + dueDateStr + '.');
+      else Alert.alert(editingId ? 'Reminder Updated!' : 'Reminder Set!', `An alert has been scheduled for ${dueDateStr}.`);
     } else {
-      Alert.alert(editingId ? 'Reminder Updated' : 'Reminder Saved', 'Saved without an alert schedule.');
+      if (Platform.OS === 'web') window.alert(editingId ? 'Reminder Updated. Saved without an alert schedule.' : 'Reminder Saved. Saved without an alert schedule.');
+      else Alert.alert(editingId ? 'Reminder Updated' : 'Reminder Saved', 'Saved without an alert schedule.');
     }
   };
 
@@ -272,10 +358,10 @@ export default function RemindersScreen() {
     <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Upcoming Reminders</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
+          <Text style={styles.title}>{t('m_reminders_title', 'Upcoming Reminders')}</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(manager)/reminders/new')}>
             <Ionicons name="add" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add Reminder</Text>
+            <Text style={styles.addBtnText}>{t('m_reminders_add_btn', 'Add Reminder')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -285,7 +371,7 @@ export default function RemindersScreen() {
               <Ionicons name="flash" size={18} color="#34D399" />
             </View>
             <Text style={styles.summaryCount}>{activeCount}</Text>
-            <Text style={styles.summaryLabel}>Active</Text>
+            <Text style={styles.summaryLabel}>{t('m_reminders_active', 'Active')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -293,7 +379,7 @@ export default function RemindersScreen() {
               <Ionicons name="checkmark-done" size={18} color="#60A5FA" />
             </View>
             <Text style={styles.summaryCount}>{completedCount}</Text>
-            <Text style={styles.summaryLabel}>Done</Text>
+            <Text style={styles.summaryLabel}>{t('m_reminders_done', 'Done')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -301,7 +387,7 @@ export default function RemindersScreen() {
               <Ionicons name="notifications-off" size={18} color="#F87171" />
             </View>
             <Text style={styles.summaryCount}>{ignoredCount}</Text>
-            <Text style={styles.summaryLabel}>Ignored</Text>
+            <Text style={styles.summaryLabel}>{t('m_reminders_ignored', 'Ignored')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -309,28 +395,36 @@ export default function RemindersScreen() {
               <Ionicons name="layers" size={18} color="#fff" />
             </View>
             <Text style={styles.summaryCount}>{totalCount}</Text>
-            <Text style={styles.summaryLabel}>Total</Text>
+            <Text style={styles.summaryLabel}>{t('m_reminders_total', 'Total')}</Text>
           </View>
         </View>
 
         <View style={styles.listHeaderRow}>
-          <Text style={styles.sectionTitle}>All Reminders</Text>
+          <Text style={styles.sectionTitle}>{t('m_reminders_all', 'All Reminders')}</Text>
           <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
             <Ionicons name="trash-outline" size={16} color="#EF4444" />
-            <Text style={styles.clearBtnText}>Clear All</Text>
+            <Text style={styles.clearBtnText}>{t('m_reminders_clear_all', 'Clear All')}</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
-          {['All', 'Active', 'Ignored', 'Completed'].map(tab => (
-            <TouchableOpacity 
-              key={tab} 
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
+          {['All', 'Active', 'Ignored', 'Completed'].map(tab => {
+            let tabLabel = tab;
+            if (tab === 'All') tabLabel = t('m_reminders_all', 'All Reminders');
+            if (tab === 'Active') tabLabel = t('m_reminders_active', 'Active');
+            if (tab === 'Ignored') tabLabel = t('m_reminders_ignored', 'Ignored');
+            if (tab === 'Completed') tabLabel = t('m_reminders_done', 'Done');
+            
+            return (
+              <TouchableOpacity 
+                key={tab} 
+                style={[styles.tab, activeTab === tab && styles.tabActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabel}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {filteredReminders.sort((a, b) => a.daysLeft - b.daysLeft).map((rem) => (
@@ -348,24 +442,29 @@ export default function RemindersScreen() {
             <View style={styles.cardRight}>
               <View style={[styles.daysBadge, { backgroundColor: getUrgencyColor(rem.daysLeft, rem.status) + '15' }]}>
                 <Text style={[styles.daysText, { color: getUrgencyColor(rem.daysLeft, rem.status) }]}>
-                  {rem.status === 'completed' ? 'Done' : rem.status === 'ignored' ? 'Ignored' : `${rem.daysLeft} ${rem.daysLeft === 1 ? 'day' : 'days'}`}
+                  {rem.status === 'completed' ? t('m_reminders_done', 'Done') : rem.status === 'ignored' ? t('m_reminders_ignored', 'Ignored') : `${rem.daysLeft} ${rem.daysLeft === 1 ? 'day' : 'days'}`}
                 </Text>
               </View>
-              {rem.status === 'active' && (
-                <View style={{ flexDirection: 'row' }}>
-                  <TouchableOpacity style={styles.editBtn} onPress={() => handleEditReminder(rem)}>
-                    <Ionicons name="pencil" size={16} color="#6B7280" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.editBtn, { marginLeft: 10, backgroundColor: '#10B98115' }]} onPress={() => handleAlarmResponse(rem.id, 'completed')}>
-                    <Ionicons name="checkmark" size={16} color="#10B981" />
-                  </TouchableOpacity>
-                </View>
-              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {rem.status === 'active' && (
+                  <>
+                    <TouchableOpacity style={styles.editBtn} onPress={() => handleEditReminder(rem)}>
+                      <Ionicons name="pencil" size={16} color="#6B7280" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.editBtn, { marginLeft: 8, backgroundColor: '#10B98115' }]} onPress={() => handleAlarmResponse(rem.id, 'completed')}>
+                      <Ionicons name="checkmark" size={16} color="#10B981" />
+                    </TouchableOpacity>
+                  </>
+                )}
+                <TouchableOpacity style={[styles.editBtn, { marginLeft: 8, backgroundColor: '#FEE2E215' }]} onPress={() => handleDeleteReminder(rem.id)}>
+                  <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ))}
         {filteredReminders.length === 0 && (
-          <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>No reminders found.</Text>
+          <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>{t('m_reminders_empty', 'No reminders found.')}</Text>
         )}
       </ScrollView>
 
@@ -399,7 +498,24 @@ export default function RemindersScreen() {
 
               <Text style={styles.label}>Due Date & Time * (Select at least one)</Text>
               <View style={styles.dateTimeRow}>
-                {hasDate ? (
+                {Platform.OS === 'web' ? (
+                  <View style={styles.dateTimeBtnWrapper}>
+                    <input 
+                      type="date"
+                      value={hasDate ? date.toISOString().split('T')[0] : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const d = new Date(e.target.value + 'T12:00:00');
+                          handleConfirmDate(d);
+                          setHasDate(true);
+                        } else {
+                          setHasDate(false);
+                        }
+                      }}
+                      style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid #BFDBFE', backgroundColor: '#EFF6FF', color: '#043094', outline: 'none', fontFamily: 'inherit' }}
+                    />
+                  </View>
+                ) : hasDate ? (
                   <View style={styles.dateTimeBtnWrapper}>
                     <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setShowDatePicker(true)}>
                       <Ionicons name="calendar-outline" size={18} color="#043094" />
@@ -416,7 +532,27 @@ export default function RemindersScreen() {
                   </TouchableOpacity>
                 )}
                 
-                {hasTime ? (
+                {Platform.OS === 'web' ? (
+                  <View style={styles.dateTimeBtnWrapper}>
+                    <input 
+                      type="time"
+                      value={hasTime ? date.toTimeString().slice(0, 5) : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const [hours, minutes] = e.target.value.split(':');
+                          const d = new Date(date);
+                          d.setHours(parseInt(hours, 10));
+                          d.setMinutes(parseInt(minutes, 10));
+                          handleConfirmTime(d);
+                          setHasTime(true);
+                        } else {
+                          setHasTime(false);
+                        }
+                      }}
+                      style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid #BFDBFE', backgroundColor: '#EFF6FF', color: '#043094', outline: 'none', fontFamily: 'inherit' }}
+                    />
+                  </View>
+                ) : hasTime ? (
                   <View style={styles.dateTimeBtnWrapper}>
                     <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setShowTimePicker(true)}>
                       <Ionicons name="time-outline" size={18} color="#043094" />

@@ -5,6 +5,8 @@ import * as Notifications from 'expo-notifications';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useAlerts } from '../../context/AlertsContext';
 import { useSchedules } from '../../context/SchedulesContext';
+import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -17,7 +19,9 @@ Notifications.setNotificationHandler({
 });
 
 export default function SchedulesScreen() {
+  const router = useRouter();
   const { addAlert } = useAlerts();
+  const { t } = useTranslation();
   const { schedules: Schedules, setSchedules, updateSchedule, addSchedule } = useSchedules();
 
   const [activeTab, setActiveTab] = useState('All');
@@ -58,11 +62,12 @@ export default function SchedulesScreen() {
   };
 
   useEffect(() => {
-    Notifications.setNotificationCategoryAsync('Schedule_ALARM', [
-      { identifier: 'MARK_DONE', buttonTitle: 'Mark as Done', options: { opensAppToForeground: true } },
-      { identifier: 'IGNORE', buttonTitle: 'Ignore', options: { isDestructive: true, opensAppToForeground: false } },
-    ]);
-
+    if (Platform.OS !== 'web') {
+      Notifications.setNotificationCategoryAsync('Schedule_ALARM', [
+        { identifier: 'MARK_DONE', buttonTitle: 'Mark as Done', options: { opensAppToForeground: true } },
+        { identifier: 'IGNORE', buttonTitle: 'Ignore', options: { isDestructive: true, opensAppToForeground: false } },
+      ]);
+    }
     const sub = Notifications.addNotificationReceivedListener(notification => {
       const data = notification.request.content.data;
       if (data && data.ScheduleId) {
@@ -152,6 +157,19 @@ export default function SchedulesScreen() {
     setDate(newDate);
   };
 
+  const getLocalDateString = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getLocalTimeString = (d: Date) => {
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   const getUrgencyColor = (days: number, status: string) => {
     if (status === 'completed') return '#10B981'; // Green
     if (status === 'ignored') return '#9CA3AF'; // Gray
@@ -161,14 +179,22 @@ export default function SchedulesScreen() {
   };
 
   const handleClearAll = () => {
-    Alert.alert(
-      'Clear Schedules',
-      'Are you sure you want to clear all Schedules?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear All', style: 'destructive', onPress: () => setSchedules([]) }
-      ]
-    );
+    const performClear = () => setSchedules([]);
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to clear all Schedules?')) {
+        performClear();
+      }
+    } else {
+      Alert.alert(
+        'Clear Schedules',
+        'Are you sure you want to clear all Schedules?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Clear All', style: 'destructive', onPress: performClear }
+        ]
+      );
+    }
   };
 
   const handleAddSchedule = async () => {
@@ -186,7 +212,7 @@ export default function SchedulesScreen() {
     let isScheduled = isReminderToggle;
     
     if (hasDate && !hasTime) {
-      finalDate.setHours(9, 0, 0, 0);
+      finalDate.setHours(23, 59, 0, 0);
     } else if (!hasDate && hasTime) {
       const now = new Date();
       finalDate.setFullYear(now.getFullYear(), now.getMonth(), now.getDate());
@@ -273,10 +299,10 @@ export default function SchedulesScreen() {
     <View style={{ flex: 1, backgroundColor: '#F3F4F6' }}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Upcoming Schedules</Text>
-          <TouchableOpacity style={styles.addBtn} onPress={openAddModal}>
+          <Text style={styles.title}>{t('m_schedules_title', 'Upcoming Schedules')}</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(manager)/schedules/new')}>
             <Ionicons name="add" size={20} color="#fff" />
-            <Text style={styles.addBtnText}>Add Schedule</Text>
+            <Text style={styles.addBtnText}>{t('m_schedules_add_btn', 'Add Schedule')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -286,7 +312,7 @@ export default function SchedulesScreen() {
               <Ionicons name="flash" size={18} color="#34D399" />
             </View>
             <Text style={styles.summaryCount}>{activeCount}</Text>
-            <Text style={styles.summaryLabel}>Active</Text>
+            <Text style={styles.summaryLabel}>{t('m_schedules_active', 'Active')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -294,7 +320,7 @@ export default function SchedulesScreen() {
               <Ionicons name="checkmark-done" size={18} color="#60A5FA" />
             </View>
             <Text style={styles.summaryCount}>{completedCount}</Text>
-            <Text style={styles.summaryLabel}>Done</Text>
+            <Text style={styles.summaryLabel}>{t('m_schedules_done', 'Done')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -302,7 +328,7 @@ export default function SchedulesScreen() {
               <Ionicons name="notifications-off" size={18} color="#F87171" />
             </View>
             <Text style={styles.summaryCount}>{ignoredCount}</Text>
-            <Text style={styles.summaryLabel}>Ignored</Text>
+            <Text style={styles.summaryLabel}>{t('m_schedules_ignored', 'Ignored')}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.summaryItem}>
@@ -310,28 +336,35 @@ export default function SchedulesScreen() {
               <Ionicons name="layers" size={18} color="#fff" />
             </View>
             <Text style={styles.summaryCount}>{totalCount}</Text>
-            <Text style={styles.summaryLabel}>Total</Text>
+            <Text style={styles.summaryLabel}>{t('m_schedules_total', 'Total')}</Text>
           </View>
         </View>
 
         <View style={styles.listHeaderRow}>
-          <Text style={styles.sectionTitle}>All Schedules</Text>
+          <Text style={styles.sectionTitle}>{t('m_schedules_all', 'All Schedules')}</Text>
           <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
             <Ionicons name="trash-outline" size={16} color="#EF4444" />
-            <Text style={styles.clearBtnText}>Clear All</Text>
+            <Text style={styles.clearBtnText}>{t('m_schedules_clear_all', 'Clear All')}</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabsContainer}>
-          {['All', 'Active', 'Ignored', 'Completed'].map(tab => (
-            <TouchableOpacity 
-              key={tab} 
-              style={[styles.tab, activeTab === tab && styles.tabActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-            </TouchableOpacity>
-          ))}
+          {['All', 'Active', 'Ignored', 'Completed'].map(tab => {
+            let tabLabel = tab;
+            if (tab === 'All') tabLabel = t('m_schedules_all', 'All Schedules');
+            if (tab === 'Active') tabLabel = t('m_schedules_active', 'Active');
+            if (tab === 'Ignored') tabLabel = t('m_schedules_ignored', 'Ignored');
+            if (tab === 'Completed') tabLabel = t('m_schedules_done', 'Done');
+            return (
+              <TouchableOpacity 
+                key={tab} 
+                style={[styles.tab, activeTab === tab && styles.tabActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tabLabel}</Text>
+              </TouchableOpacity>
+            )
+          })}
         </ScrollView>
 
         {filteredSchedules.sort((a, b) => a.daysLeft - b.daysLeft).map((rem) => (
@@ -349,7 +382,7 @@ export default function SchedulesScreen() {
             <View style={styles.cardRight}>
               <View style={[styles.daysBadge, { backgroundColor: getUrgencyColor(rem.daysLeft, rem.status) + '15' }]}>
                 <Text style={[styles.daysText, { color: getUrgencyColor(rem.daysLeft, rem.status) }]}>
-                  {rem.status === 'completed' ? 'Done' : rem.status === 'ignored' ? 'Ignored' : `${rem.daysLeft} ${rem.daysLeft === 1 ? 'day' : 'days'}`}
+                  {rem.status === 'completed' ? t('m_schedules_done', 'Done') : rem.status === 'ignored' ? t('m_schedules_ignored', 'Ignored') : `${rem.daysLeft} ${rem.daysLeft === 1 ? 'day' : 'days'}`}
                 </Text>
               </View>
               {rem.status === 'active' && (
@@ -366,7 +399,7 @@ export default function SchedulesScreen() {
           </View>
         ))}
         {filteredSchedules.length === 0 && (
-          <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>No Schedules found.</Text>
+          <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>{t('m_schedules_empty', 'No Schedules found.')}</Text>
         )}
       </ScrollView>
 
@@ -400,7 +433,43 @@ export default function SchedulesScreen() {
 
               <Text style={styles.label}>Due Date & Time * (Select at least one)</Text>
               <View style={styles.dateTimeRow}>
-                {hasDate ? (
+                {Platform.OS === 'web' ? (
+                  <View style={[styles.webInputWrapper, !hasDate && styles.webInputWrapperEmpty]}>
+                    <Ionicons name={hasDate ? "calendar" : "calendar-outline"} size={16} color={hasDate ? "#043094" : "#6B7280"} style={{ marginRight: 6 }} />
+                    <input 
+                      type="date"
+                      value={hasDate ? getLocalDateString(date) : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const [year, month, day] = e.target.value.split('-').map(Number);
+                          const nextDate = new Date(date);
+                          nextDate.setFullYear(year, month - 1, day);
+                          setDate(nextDate);
+                          setHasDate(true);
+                        } else {
+                          setHasDate(false);
+                        }
+                      }}
+                      onClick={(e) => (e.target as any).showPicker && (e.target as any).showPicker()}
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: hasDate ? '#043094' : '#6B7280',
+                        fontWeight: '600',
+                        fontSize: '13px',
+                        fontFamily: 'inherit',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    />
+                    {hasDate && (
+                      <TouchableOpacity style={styles.clearDateTimeBtn} onPress={() => setHasDate(false)}>
+                        <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : hasDate ? (
                   <View style={styles.dateTimeBtnWrapper}>
                     <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setShowDatePicker(true)}>
                       <Ionicons name="calendar-outline" size={18} color="#043094" />
@@ -417,7 +486,43 @@ export default function SchedulesScreen() {
                   </TouchableOpacity>
                 )}
                 
-                {hasTime ? (
+                {Platform.OS === 'web' ? (
+                  <View style={[styles.webInputWrapper, !hasTime && styles.webInputWrapperEmpty]}>
+                    <Ionicons name={hasTime ? "time" : "time-outline"} size={16} color={hasTime ? "#043094" : "#6B7280"} style={{ marginRight: 6 }} />
+                    <input 
+                      type="time"
+                      value={hasTime ? getLocalTimeString(date) : ''}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const [hours, minutes] = e.target.value.split(':').map(Number);
+                          const nextDate = new Date(date);
+                          nextDate.setHours(hours, minutes, 0, 0);
+                          setDate(nextDate);
+                          setHasTime(true);
+                        } else {
+                          setHasTime(false);
+                        }
+                      }}
+                      onClick={(e) => (e.target as any).showPicker && (e.target as any).showPicker()}
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        color: hasTime ? '#043094' : '#6B7280',
+                        fontWeight: '600',
+                        fontSize: '13px',
+                        fontFamily: 'inherit',
+                        outline: 'none',
+                        cursor: 'pointer',
+                      }}
+                    />
+                    {hasTime && (
+                      <TouchableOpacity style={styles.clearDateTimeBtn} onPress={() => setHasTime(false)}>
+                        <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ) : hasTime ? (
                   <View style={styles.dateTimeBtnWrapper}>
                     <TouchableOpacity style={styles.dateTimeBtn} onPress={() => setShowTimePicker(true)}>
                       <Ionicons name="time-outline" size={18} color="#043094" />
@@ -437,22 +542,26 @@ export default function SchedulesScreen() {
                 )}
               </View>
 
-              <DateTimePickerModal
-                isVisible={showDatePicker}
-                mode="date"
-                date={date}
-                minimumDate={new Date()}
-                onConfirm={handleConfirmDate}
-                onCancel={() => setShowDatePicker(false)}
-              />
-              
-              <DateTimePickerModal
-                isVisible={showTimePicker}
-                mode="time"
-                date={date}
-                onConfirm={handleConfirmTime}
-                onCancel={() => setShowTimePicker(false)}
-              />
+              {Platform.OS !== 'web' && (
+                <>
+                  <DateTimePickerModal
+                    isVisible={showDatePicker}
+                    mode="date"
+                    date={date}
+                    minimumDate={new Date()}
+                    onConfirm={handleConfirmDate}
+                    onCancel={() => setShowDatePicker(false)}
+                  />
+                  
+                  <DateTimePickerModal
+                    isVisible={showTimePicker}
+                    mode="time"
+                    date={date}
+                    onConfirm={handleConfirmTime}
+                    onCancel={() => setShowTimePicker(false)}
+                  />
+                </>
+              )}
 
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, marginTop: 10, padding: 12, backgroundColor: '#F3F4F6', borderRadius: 8 }}>
                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#374151' }}>Set as Reminder</Text>
@@ -580,7 +689,24 @@ const styles = StyleSheet.create({
   cancelBtn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8 },
   cancelBtnText: { color: '#6B7280', fontWeight: '600', fontSize: 15 },
   saveBtn: { backgroundColor: '#043094', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8 },
-  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 }
+  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  webInputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    minHeight: 40,
+  },
+  webInputWrapperEmpty: {
+    backgroundColor: '#F9FAFB',
+    borderColor: '#D1D5DB',
+    borderStyle: 'dashed',
+  },
 });
 
 

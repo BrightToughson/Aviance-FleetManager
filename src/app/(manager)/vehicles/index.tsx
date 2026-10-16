@@ -3,10 +3,12 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image,
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useVehicles } from '../../../context/VehicleContext';
+import { useTranslation } from 'react-i18next';
 
 export default function VehicleListScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
-  const { vehicles } = useVehicles();
+  const { vehicles, updateVehicleData } = useVehicles();
   const [activeTab, setActiveTab] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -63,8 +65,36 @@ export default function VehicleListScreen() {
   const nextPage = () => { if (currentPage < totalPages) setCurrentPage(currentPage + 1); };
   const prevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
 
-  const handleAction = (action: string) => {
+  const handleAction = async (action: string) => {
     setActionModalVisible(false);
+    if (action === 'Assign Driver' || action === 'Reassign Driver') {
+      if (selectedVehicle) {
+        router.push(`/(manager)/vehicles/assign/${selectedVehicle.id}` as any);
+      }
+      return;
+    }
+    
+    if (action === 'Remove Driver') {
+      if (selectedVehicle) {
+        if (!selectedVehicle.assignedTo || selectedVehicle.assignedTo === 'Unassigned') {
+          if (Platform.OS === 'web') {
+            window.alert("No driver is currently assigned to this vehicle.");
+          } else {
+            Alert.alert("Notice", "No driver is currently assigned to this vehicle.");
+          }
+          return;
+        }
+        
+        await updateVehicleData(selectedVehicle.id, { assignedTo: 'Unassigned' });
+        if (Platform.OS === 'web') {
+          window.alert(`Driver removed from ${selectedVehicle?.name}`);
+        } else {
+          Alert.alert("Success", `Driver removed from ${selectedVehicle?.name}`);
+        }
+      }
+      return;
+    }
+
     if (Platform.OS === 'web') {
       window.alert(`${action} successful for ${selectedVehicle?.name}`);
     } else {
@@ -77,22 +107,22 @@ export default function VehicleListScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.title}>Vehicles</Text>
+          <Text style={styles.title}>{t('nav_vehicles', 'Vehicles')}</Text>
           <TouchableOpacity style={styles.learnBadge} onPress={() => router.push('/(manager)/vehicles/learn')}>
             <Ionicons name="bulb-outline" size={14} color="#6B7280" style={{marginRight: 4}} />
-            <Text style={styles.learnText}>Learn</Text>
+            <Text style={styles.learnText}>{t('veh_learn', 'Learn')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(manager)/vehicles/scan')}>
-            <Ionicons name="qr-code-outline" size={20} color="#4B5563" />
+            <Ionicons name="search-outline" size={20} color="#4B5563" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/(manager)/vehicles/tracking')}>
             <Ionicons name="map-outline" size={20} color="#4B5563" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.addBtn} onPress={() => router.push('/(manager)/vehicles/add')}>
             <Ionicons name="add" size={18} color="#fff" style={{marginRight: 4}} />
-            <Text style={styles.addBtnText}>Add Vehicle</Text>
+            <Text style={styles.addBtnText}>{t('veh_add_vehicle', 'Add Vehicle')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -101,7 +131,7 @@ export default function VehicleListScreen() {
       <View style={styles.tabsRow}>
         {['All', 'Assigned', 'Unassigned', 'Archived'].map(tab => (
           <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={[styles.tab, activeTab === tab && styles.activeTab]}>
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{tab}</Text>
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>{t(`veh_tab_${tab.toLowerCase()}`, tab)}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -111,7 +141,7 @@ export default function VehicleListScreen() {
         <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color="#9CA3AF" />
           <TextInput 
-            placeholder="Search by Name, VIN, Make, Model" 
+            placeholder={t('veh_search_placeholder', 'Search by Name, VIN, Make, Model')} 
             style={styles.searchInput} 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
@@ -126,7 +156,7 @@ export default function VehicleListScreen() {
         <View style={styles.filtersGroup}>
           <TouchableOpacity style={styles.filterBtn} onPress={() => setFilterModalVisible(true)}>
             <Ionicons name="filter" size={14} color="#6B7280" style={{marginRight: 4}} />
-            <Text style={styles.filterChipText}>{filterMake === 'All' ? 'Filters' : `Make: ${filterMake}`}</Text>
+            <Text style={styles.filterChipText}>{filterMake === 'All' ? t('veh_filters', 'Filters') : `${t('veh_make', 'Make')}: ${filterMake}`}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.pagination}>
@@ -146,16 +176,16 @@ export default function VehicleListScreen() {
           {/* Table Header */}
           <View style={styles.tableHeader}>
             <Ionicons name="square-outline" size={18} color="#D1D5DB" style={{ width: 40, paddingLeft: 10 }} />
-            <Text style={[styles.th, { width: 180 }]}>Name</Text>
-            <Text style={[styles.th, { width: 100 }]}>Year</Text>
-            <Text style={[styles.th, { width: 140 }]}>Make</Text>
-            <Text style={[styles.th, { width: 140 }]}>Model</Text>
-            <Text style={[styles.th, { width: 220 }]}>VIN</Text>
-            <Text style={[styles.th, { width: 150 }]}>Status</Text>
-            <Text style={[styles.th, { width: 120 }]}>Type</Text>
-            <Text style={[styles.th, { width: 140 }]}>Group</Text>
-            <Text style={[styles.th, { width: 120 }]}>Current Meter</Text>
-            <Text style={[styles.th, { width: 140 }]}>License Plate</Text>
+            <Text style={[styles.th, { width: 180 }]}>{t('veh_col_name', 'Name')}</Text>
+            <Text style={[styles.th, { width: 100 }]}>{t('veh_col_year', 'Year')}</Text>
+            <Text style={[styles.th, { width: 140 }]}>{t('veh_col_make', 'Make')}</Text>
+            <Text style={[styles.th, { width: 140 }]}>{t('veh_col_model', 'Model')}</Text>
+            <Text style={[styles.th, { width: 220 }]}>{t('veh_col_vin', 'VIN')}</Text>
+            <Text style={[styles.th, { width: 150 }]}>{t('veh_col_status', 'Status')}</Text>
+            <Text style={[styles.th, { width: 120 }]}>{t('veh_col_type', 'Type')}</Text>
+            <Text style={[styles.th, { width: 140 }]}>{t('veh_col_group', 'Group')}</Text>
+            <Text style={[styles.th, { width: 120 }]}>{t('veh_col_meter', 'Current Meter')}</Text>
+            <Text style={[styles.th, { width: 140 }]}>{t('veh_col_plate', 'License Plate')}</Text>
             <Text style={[styles.th, { width: 60 }]}></Text>
           </View>
 
@@ -201,31 +231,35 @@ export default function VehicleListScreen() {
       <Modal visible={actionModalVisible} transparent={true} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setActionModalVisible(false)}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Actions for {selectedVehicle?.name}</Text>
+            <Text style={styles.modalTitle}>{t('veh_actions_for', 'Actions for')} {selectedVehicle?.name}</Text>
             
-            <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Assign Driver')}>
-              <Ionicons name="person-add-outline" size={20} color="#043094" />
-              <Text style={styles.modalBtnText}>Assign Driver</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Reassign Driver')}>
-              <Ionicons name="swap-horizontal-outline" size={20} color="#F59E0B" />
-              <Text style={styles.modalBtnText}>Reassign Driver</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Remove Driver')}>
-              <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
-              <Text style={[styles.modalBtnText, { color: '#EF4444' }]}>Remove Driver</Text>
-            </TouchableOpacity>
+            {(!selectedVehicle?.assignedTo || selectedVehicle?.assignedTo === 'Unassigned') ? (
+              <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Assign Driver')}>
+                <Ionicons name="person-add-outline" size={20} color="#043094" />
+                <Text style={styles.modalBtnText}>{t('veh_assign_driver', 'Assign Driver')}</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Reassign Driver')}>
+                  <Ionicons name="swap-horizontal-outline" size={20} color="#F59E0B" />
+                  <Text style={styles.modalBtnText}>{t('veh_reassign_driver', 'Reassign Driver')}</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Remove Driver')}>
+                  <Ionicons name="person-remove-outline" size={20} color="#EF4444" />
+                  <Text style={[styles.modalBtnText, { color: '#EF4444' }]}>{t('veh_remove_driver', 'Remove Driver')}</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity style={styles.modalBtn} onPress={() => handleAction('Archive Vehicle')}>
               <Ionicons name="archive-outline" size={20} color="#6B7280" />
-              <Text style={styles.modalBtnText}>Archive Vehicle</Text>
+              <Text style={styles.modalBtnText}>{t('veh_archive', 'Archive Vehicle')}</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={[styles.modalBtn, { borderBottomWidth: 0 }]} onPress={() => handleAction('Delete Vehicle')}>
               <Ionicons name="trash-outline" size={20} color="#EF4444" />
-              <Text style={[styles.modalBtnText, { color: '#EF4444' }]}>Delete Vehicle</Text>
+              <Text style={[styles.modalBtnText, { color: '#EF4444' }]}>{t('veh_delete', 'Delete Vehicle')}</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -235,9 +269,9 @@ export default function VehicleListScreen() {
       <Modal visible={filterModalVisible} transparent={true} animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { width: 300 }]}>
-            <Text style={styles.modalTitle}>Filter Vehicles</Text>
+            <Text style={styles.modalTitle}>{t('veh_filter_title', 'Filter Vehicles')}</Text>
             
-            <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>By Make:</Text>
+            <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>{t('veh_by_make', 'By Make')}:</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
               {['All', 'Caterpillar', 'New Holland', 'Toyota', 'Freightliner'].map(make => (
                 <TouchableOpacity 
@@ -251,7 +285,7 @@ export default function VehicleListScreen() {
             </View>
             
             <TouchableOpacity style={styles.applyBtn} onPress={() => setFilterModalVisible(false)}>
-              <Text style={{ color: '#fff', fontWeight: 'bold' }}>Apply Filters</Text>
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('veh_apply_filters', 'Apply Filters')}</Text>
             </TouchableOpacity>
           </View>
         </View>

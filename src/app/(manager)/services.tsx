@@ -6,9 +6,11 @@ import { useRouter } from 'expo-router';
 import SummaryBox from '../../components/SummaryBox';
 
 import { useServices } from '../../context/ServicesContext';
+import { useTranslation } from 'react-i18next';
 
 export default function ServicesScreen() {
   const { width } = useWindowDimensions();
+  const { t } = useTranslation();
   const isMobile = width < 1024;
   const router = useRouter();
 
@@ -49,7 +51,7 @@ export default function ServicesScreen() {
         vendor: data.vendor || 'In-House',
         tasks: data.task || existingReq.tasks,
         cost: data.cost ? `GH₵${data.cost}` : 'GH₵0.00',
-        status: data.status || 'Pending Approval',
+        status: 'Approved',
         id: `RO-90${Math.floor(Math.random() * 100)}`
       });
     } else {
@@ -58,7 +60,7 @@ export default function ServicesScreen() {
         vendor: data.vendor || 'In-House',
         tasks: data.task || 'General Service',
         cost: data.cost ? `GH₵${data.cost}` : 'GH₵0.00',
-        status: data.status || 'Pending Approval'
+        status: 'Approved'
       });
     }
     setIsModalVisible(false);
@@ -66,8 +68,7 @@ export default function ServicesScreen() {
   };
 
   const handleMakeRO = (id: string) => {
-    setSelectedRequestId(id);
-    setRoModalVisible(true);
+    router.push(`/(manager)/services/new-ro?requestId=${id}`);
   };
 
   const handleAction = (id: string) => {
@@ -81,7 +82,6 @@ export default function ServicesScreen() {
     { name: 'vendor', label: 'Vendor/Shop', type: 'text', placeholder: 'e.g. Jiffy Lube' },
     { name: 'task', label: 'Service Task', type: 'text', required: true, placeholder: 'e.g. Oil Change' },
     { name: 'cost', label: 'Total Cost (GH₵)', type: 'number', placeholder: '150.00' },
-    { name: 'status', label: 'Approval Status', type: 'select', options: ['Approved', 'Pending', 'Rejected'] },
   ];
 
   const requestFields: FormField[] = [
@@ -123,33 +123,33 @@ export default function ServicesScreen() {
       
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View>
-          <Text style={styles.pageTitle}>Services & ROs</Text>
-          <Text style={styles.pageSubtitle}>Track maintenance, repair orders, and service costs</Text>
+          <Text style={styles.pageTitle}>{t('m_services_title', 'Services & ROs')}</Text>
+          <Text style={styles.pageSubtitle}>{t('m_services_subtitle', 'Track maintenance, repair orders, and service costs')}</Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' }]} onPress={() => setRequestModalVisible(true)}>
+          <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: '#F3F4F6', borderWidth: 1, borderColor: '#E5E7EB' }]} onPress={() => router.push('/(manager)/services/new-request')}>
             <Ionicons name="add" size={20} color="#374151" />
-            <Text style={[styles.primaryBtnText, { color: '#374151' }]}>Create Request</Text>
+            <Text style={[styles.primaryBtnText, { color: '#374151' }]}>{t('m_services_create_req', 'Create Request')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => setIsModalVisible(true)}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/(manager)/services/new-ro')}>
             <Ionicons name="build" size={20} color="#fff" />
-            <Text style={styles.primaryBtnText}>Create RO</Text>
+            <Text style={styles.primaryBtnText}>{t('m_services_create_ro', 'Create RO')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <SummaryBox items={[
-        { label: 'Pending Approvals', count: services.filter(s => s.status === 'Pending Approval').length, icon: 'time', color: '#F59E0B' },
-        { label: 'Monthly Cost', count: 'GH₵4,250', icon: 'cash', color: '#ffffff' },
-        { label: 'Cost / Mile', count: 'GH₵0.14', icon: 'speedometer', color: '#34D399' }
+        { label: t('m_services_pending', 'Pending Approvals'), count: services.filter(s => s.status === 'Pending Approval').length, icon: 'time', color: '#F59E0B' },
+        { label: t('m_services_monthly_cost', 'Monthly Cost'), count: 'GH₵0.00', icon: 'cash', color: '#ffffff' },
+        { label: t('m_services_cost_mile', 'Cost / Mile'), count: 'GH₵0.00', icon: 'speedometer', color: '#34D399' }
       ]} />
 
       <View style={styles.tabsContainer}>
         <TouchableOpacity style={[styles.tab, activeTab === 'RO' && styles.tabActive]} onPress={() => setActiveTab('RO')}>
-          <Text style={[styles.tabText, activeTab === 'RO' && styles.tabTextActive]}>Repair Orders</Text>
+          <Text style={[styles.tabText, activeTab === 'RO' && styles.tabTextActive]}>{t('m_services_tab_ro', 'Repair Orders')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'Requests' && styles.tabActive]} onPress={() => setActiveTab('Requests')}>
-          <Text style={[styles.tabText, activeTab === 'Requests' && styles.tabTextActive]}>Service Requests</Text>
+          <Text style={[styles.tabText, activeTab === 'Requests' && styles.tabTextActive]}>{t('m_services_tab_requests', 'Service Requests')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -158,7 +158,7 @@ export default function ServicesScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput 
             style={styles.searchInput} 
-            placeholder="Search by vehicle, vendor, or task..." 
+            placeholder={t('m_services_search_ph', 'Search by vehicle, vendor, or task...')}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -171,12 +171,12 @@ export default function ServicesScreen() {
       <View style={styles.card}>
         {!isMobile && (
           <View style={styles.tableHeader}>
-            <Text style={[styles.th, { flex: 1 }]}>RO #</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Vehicle</Text>
-            <Text style={[styles.th, { flex: 2 }]}>Vendor / Tasks</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Date</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Cost</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Status</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('m_services_ro_th', 'RO #')}</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>{t('m_services_vehicle_th', 'Vehicle')}</Text>
+            <Text style={[styles.th, { flex: 2 }]}>{t('m_services_vendor_tasks_th', 'Vendor / Tasks')}</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('m_services_date_th', 'Date')}</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('m_services_cost_th', 'Cost')}</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>{t('m_services_status_th', 'Status')}</Text>
             <View style={{ width: 100 }} />
           </View>
         )}
@@ -190,17 +190,17 @@ export default function ServicesScreen() {
           >
             
             <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>RO #</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('m_services_ro_th', 'RO #')}</Text>}
               <Text style={[styles.cellText, { fontWeight: '600', color: '#043094' }]}>{srv.id}</Text>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Vehicle</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('m_services_vehicle_th', 'Vehicle')}</Text>}
               <Text style={[styles.cellText, { fontWeight: '600' }]}>{srv.vehicle}</Text>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 2 }, isMobile && styles.mobileDataRow, isMobile && { flexDirection: 'column', alignItems: 'flex-end' }]}>
-              {isMobile && <Text style={[styles.mobileLabel, { alignSelf: 'flex-start' }]}>Vendor & Tasks</Text>}
+              {isMobile && <Text style={[styles.mobileLabel, { alignSelf: 'flex-start' }]}>{t('m_services_vendor_tasks_th', 'Vendor & Tasks')}</Text>}
               <View style={!isMobile && { paddingRight: 20 }}>
                 <Text style={styles.cellText}>{srv.vendor}</Text>
                 <Text style={[styles.cellText, { fontSize: 12, color: '#6B7280', marginTop: 2 }]}>{srv.tasks}</Text>
@@ -208,17 +208,17 @@ export default function ServicesScreen() {
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Date</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('m_services_date_th', 'Date')}</Text>}
               <Text style={styles.cellText}>{srv.date || 'N/A'}</Text>
             </View>
             
             <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Cost</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('m_services_cost_th', 'Cost')}</Text>}
               <Text style={[styles.cellText, { fontWeight: '600' }]}>{srv.cost}</Text>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Status</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('m_services_status_th', 'Status')}</Text>}
               <View style={[
                 styles.statusBadge, 
                 srv.status === 'Completed' ? styles.statusSuccess : 
@@ -241,12 +241,12 @@ export default function ServicesScreen() {
                     handleMakeRO(srv.id);
                   }}
                 >
-                  <Text style={styles.actionBtnText}>Make RO</Text>
+                  <Text style={styles.actionBtnText}>{t('m_services_make_ro_btn', 'Make RO')}</Text>
                 </TouchableOpacity>
               ) : (
                 <View style={isMobile ? styles.mobileActionBtn : undefined}>
                   {isMobile ? (
-                    <Text style={styles.mobileActionBtnText}>View Details</Text>
+                    <Text style={styles.mobileActionBtnText}>{t('m_services_view_details', 'View Details')}</Text>
                   ) : (
                     <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
                   )}
@@ -257,32 +257,6 @@ export default function ServicesScreen() {
           </TouchableOpacity>
         ))}
       </View>
-      
-      <FormModal 
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        title="Create Repair Order (RO)"
-        fields={modalFields}
-        onSubmit={handleAddService}
-      />
-
-      <FormModal 
-        visible={roModalVisible}
-        onClose={() => setRoModalVisible(false)}
-        title="Convert Request to RO"
-        fields={makeRoFields}
-        onSubmit={handleSubmitRO}
-        submitText="Create RO"
-      />
-
-      <FormModal 
-        visible={requestModalVisible}
-        onClose={() => setRequestModalVisible(false)}
-        title="Create Service Request"
-        fields={requestFields}
-        onSubmit={handleCreateRequest}
-        submitText="Create Request"
-      />
     </ScrollView>
   );
 }

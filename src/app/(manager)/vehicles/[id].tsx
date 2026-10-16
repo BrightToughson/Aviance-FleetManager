@@ -76,7 +76,7 @@ export default function VehicleDetailsScreen() {
   const currentVehicle = vehicles.find((v: any) => v.id === id) || vehicles[0];
 
   const [isEditing, setIsEditing] = useState(false);
-  const [vehicleImage, setVehicleImage] = useState(currentVehicle.image || 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&q=80&w=200&h=200');
+  const [vehicleImage, setVehicleImage] = useState(currentVehicle?.image || 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&q=80&w=200&h=200');
   
   const [labels, setLabels] = useState(['Heavy Duty', 'Leased']);
   const [labelsModalVisible, setLabelsModalVisible] = useState(false);
@@ -157,33 +157,53 @@ export default function VehicleDetailsScreen() {
   };
 
   const [vehicleData, setVehicleData] = useState({
-    id: currentVehicle.id,
-    name: currentVehicle.name,
-    meter: currentVehicle.meter?.replace(' hr', '').replace(' mi', '') || '0',
-    status: currentVehicle.status,
+    id: currentVehicle?.id || '',
+    name: currentVehicle?.name || 'Loading...',
+    meter: currentVehicle?.meter?.replace(' hr', '').replace(' mi', '') || '0',
+    status: currentVehicle?.status || 'Unknown',
     autoIntegrate: 'Enabled - Pending',
-    group: currentVehicle.group,
-    operator: currentVehicle.assignedTo || 'Unassigned',
-    type: currentVehicle.type,
+    group: currentVehicle?.group || 'Unassigned',
+    operator: currentVehicle?.assignedTo || 'Unassigned',
+    type: currentVehicle?.type || 'Vehicle',
     fuelType: '--',
-    vin: currentVehicle.vin,
-    plate: currentVehicle.plate || '--',
-    year: currentVehicle.year,
-    make: currentVehicle.make,
+    vin: currentVehicle?.vin || '--',
+    plate: currentVehicle?.plate || '--',
+    year: currentVehicle?.year || '--',
+    make: currentVehicle?.make || '--',
     engine: '12.8L',
     transmission: '10-Speed Automatic',
     drive: '6x4',
     gvwr: '52,000 lbs',
     wheelbase: '230 in',
-    purchasePrice: 'GH₵145,000.00',
+    purchasePrice: 'GH₵0.00',
     purchaseDate: 'Oct 12, 2018',
-    currentValue: 'GH₵82,500.00',
+    currentValue: 'GH₵0.00',
     loan: 'Paid Off',
     powertrainWarranty: '5 Years / 500,000 Miles',
     powertrainExpires: 'Oct 12, 2023',
     bumperToBumper: '3 Years / 300,000 Miles',
     bumperExpires: 'Oct 12, 2021',
   });
+
+  React.useEffect(() => {
+    if (currentVehicle) {
+      setVehicleImage(currentVehicle.image || 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&q=80&w=200&h=200');
+      setVehicleData(prev => ({
+        ...prev,
+        id: currentVehicle.id,
+        name: currentVehicle.name,
+        meter: currentVehicle.meter?.replace(' hr', '').replace(' mi', '') || '0',
+        status: currentVehicle.status,
+        group: currentVehicle.group || 'Unassigned',
+        operator: currentVehicle.assignedTo || 'Unassigned',
+        type: currentVehicle.type,
+        vin: currentVehicle.vin,
+        plate: currentVehicle.plate || '--',
+        year: currentVehicle.year,
+        make: currentVehicle.make,
+      }));
+    }
+  }, [currentVehicle]);
 
   return (
     <View style={styles.container}>
@@ -368,11 +388,11 @@ export default function VehicleDetailsScreen() {
                     <View style={styles.costMetricsRow}>
                       <View style={styles.costMetric}>
                         <Text style={styles.costLabel}>Total Costs</Text>
-                        <Text style={styles.costValue}>GH₵52,682.31</Text>
+                        <Text style={styles.costValue}>GH₵0.00</Text>
                       </View>
                       <View style={styles.costMetric}>
                         <Text style={styles.costLabel}>Cost Per Meter</Text>
-                        <Text style={styles.costValue}>GH₵182.92 <Text style={{fontSize: 14, color: '#6B7280'}}>/ mi</Text></Text>
+                        <Text style={styles.costValue}>GH₵0.00 <Text style={{fontSize: 14, color: '#6B7280'}}>/ mi</Text></Text>
                       </View>
                     </View>
 
@@ -383,9 +403,9 @@ export default function VehicleDetailsScreen() {
                     />
                     
                     <View style={styles.legendRow}>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#06b6d4'}]} /><View><Text style={styles.legendLabel}>Fuel Costs</Text><Text style={styles.legendValue}>GH₵51,877.27</Text></View></View>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#eab308'}]} /><View><Text style={styles.legendLabel}>Service Costs</Text><Text style={styles.legendValue}>GH₵590.53</Text></View></View>
-                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#a855f7'}]} /><View><Text style={styles.legendLabel}>Other Costs</Text><Text style={styles.legendValue}>GH₵214.51</Text></View></View>
+                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#06b6d4'}]} /><View><Text style={styles.legendLabel}>Fuel Costs</Text><Text style={styles.legendValue}>GH₵0.00</Text></View></View>
+                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#eab308'}]} /><View><Text style={styles.legendLabel}>Service Costs</Text><Text style={styles.legendValue}>GH₵0.00</Text></View></View>
+                      <View style={styles.legendItem}><View style={[styles.legendDot, {backgroundColor: '#a855f7'}]} /><View><Text style={styles.legendLabel}>Other Costs</Text><Text style={styles.legendValue}>GH₵0.00</Text></View></View>
                     </View>
                   </View>
                 )}
@@ -653,7 +673,7 @@ const styles = StyleSheet.create({
   backText: { fontSize: 14, color: '#4B5563', marginLeft: 4, fontWeight: '500' },
   headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerLeft: { flexDirection: 'row' },
-  vehicleImg: { width: 80, height: 80, borderRadius: 8, marginRight: 20 },
+  vehicleImg: { width: 80, height: 80, borderRadius: 4, marginRight: 20 },
   title: { fontSize: 28, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#6B7280', marginBottom: 8 },
   badgesRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },

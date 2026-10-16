@@ -1,21 +1,82 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useIssues } from '../../../context/IssuesContext';
+import FormModal, { FormField } from '../../../components/FormModal';
+import { useServices } from '../../../context/ServicesContext';
+import { useAlerts } from '../../../context/AlertsContext';
+import { supabase } from '../../../lib/supabase';
 
 export default function IssueDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { issues } = useIssues();
+  const { issues, updateIssue } = useIssues();
+  const { addService } = useServices();
+  const { addAlert } = useAlerts();
+
+  const [flagModalVisible, setFlagModalVisible] = useState(false);
 
   const issue = issues.find(i => i.id === id);
+
+  const flagFields: FormField[] = [
+    { name: 'serviceDetails', label: 'Service Details', type: 'textarea', placeholder: 'Describe what needs to be serviced...', required: true }
+  ];
+
+  const handleFlagForService = async (data: any) => {
+    if (issue) {
+      if (issue.vehicleId) {
+        const { error: maintError } = await supabase.from('maintenance_requests').insert([{
+          vehicle_id: issue.vehicleId,
+          driver_id: issue.reporterId || 'unknown',
+          description: `Flagged from Issue #${typeof id === 'string' ? id.slice(0, 8) : ''}. Notes: ${data.serviceDetails || 'No manager notes provided.'}`,
+          status: 'pending'
+        }]);
+
+        if (maintError) {
+           console.error(maintError);
+           if (Platform.OS === 'web') window.alert("Failed to flag for maintenance.");
+           else Alert.alert("Error", "Failed to flag for maintenance.");
+           setFlagModalVisible(false);
+           return;
+        }
+
+        await supabase.from('alerts').insert([{
+          title: 'Maintenance Required',
+          body: `Please bring ${issue.vehicle} to the mechanic. Maintenance has been flagged from an issue.`,
+          type: 'request',
+          is_read: false
+        }]);
+      } else {
+        addService({
+          vehicle: issue.vehicle,
+          vendor: 'Pending Assignment',
+          tasks: data.serviceDetails,
+          cost: 'GH₵0.00',
+          status: 'Needs Service'
+        });
+      }
+
+      updateIssue(issue.id, { status: 'In Progress' });
+      addAlert('Flagged for Maintenance', `Issue for ${issue.vehicle} has been flagged for maintenance.`, 'system');
+      
+      setFlagModalVisible(false);
+      router.push('/(manager)/maintenance');
+    }
+  };
+
+  const handleMarkResolved = () => {
+    if (issue) {
+      updateIssue(issue.id, { status: 'Resolved' });
+      addAlert('Issue Resolved', `Issue for ${issue.vehicle} has been marked as resolved.`, 'system');
+    }
+  };
 
   if (!issue) {
     return (
       <View style={styles.centerContainer}>
         <Text style={styles.errorText}>Issue not found</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.push('/(manager)/issues')}>
           <Text style={styles.backBtnText}>Go Back</Text>
         </TouchableOpacity>
       </View>
@@ -24,7 +85,7 @@ export default function IssueDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity style={styles.backNav} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.backNav} onPress={() => router.push('/(manager)/issues')}>
         <Ionicons name="arrow-back" size={20} color="#4B5563" />
         <Text style={styles.backNavText}>Back to Issues</Text>
       </TouchableOpacity>
@@ -32,7 +93,7 @@ export default function IssueDetailScreen() {
       <View style={styles.card}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.idText}>{issue.id}</Text>
+            <Text style={styles.idText}>{issue.priority} Priority Issue</Text>
             <Text style={styles.title}>{issue.issue}</Text>
           </View>
           <View style={[styles.badge, issue.status === 'Resolved' ? styles.badgeSuccess : issue.status === 'Open' ? styles.badgeDanger : styles.badgeWarning]}>
@@ -65,19 +126,40 @@ export default function IssueDetailScreen() {
           </View>
         </View>
 
+        {issue.imageUrl && (
+          <View style={styles.imageSection}>
+            <Text style={styles.sectionTitle}>Attached Photo</Text>
+            <Image source={{ uri: issue.imageUrl }} style={styles.attachedImage} />
+          </View>
+        )}
+
         <View style={styles.divider} />
 
         <Text style={styles.sectionTitle}>Update Status</Text>
         <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.actionBtn, styles.btnWarning]}>
-            <Text style={styles.btnWarningText}>Mark In Progress</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.btnSuccess]}>
-            <Text style={styles.btnSuccessText}>Mark Resolved</Text>
-          </TouchableOpacity>
+          {issue.status !== 'In Progress' && issue.status !== 'Resolved' && (
+            <TouchableOpacity style={[styles.actionBtn, styles.btnWarning]} onPress={() => setFlagModalVisible(true)}>
+              <Text style={styles.btnWarningText}>Flag for Maintenance</Text>
+            </TouchableOpacity>
+          )}
+          {issue.status !== 'Resolved' && (
+            <TouchableOpacity style={[styles.actionBtn, styles.btnSuccess]} onPress={handleMarkResolved}>
+              <Text style={styles.btnSuccessText}>Mark Resolved</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
       </View>
+
+      <FormModal 
+        visible={flagModalVisible}
+        onClose={() => setFlagModalVisible(false)}
+        title="Flag for Maintenance"
+        description={`Provide details about the required maintenance for ${issue?.vehicle}. This will automatically create a new service record.`}
+        fields={flagFields}
+        onSubmit={handleFlagForService}
+        submitText="Flag Issue"
+      />
     </ScrollView>
   );
 }
@@ -115,4 +197,6 @@ const styles = StyleSheet.create({
   btnWarningText: { color: '#D97706', fontWeight: '600' },
   btnSuccess: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   btnSuccessText: { color: '#059669', fontWeight: '600' },
+  imageSection: { marginTop: 24 },
+  attachedImage: { width: '100%', height: 300, borderRadius: 12, resizeMode: 'cover', marginTop: 12, borderWidth: 1, borderColor: '#E5E7EB' },
 });

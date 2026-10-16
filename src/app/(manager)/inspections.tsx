@@ -2,32 +2,34 @@ import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, useWindowDimensions, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import SummaryBox from '../../components/SummaryBox';
 
-const DUMMY_INSPECTIONS = [
-  { id: 'INS-1042', vehicle: 'AP101', driver: 'John Smith', date: '2024-05-14 06:30 AM', status: 'Passed', defects: 0 },
-  { id: 'INS-1043', vehicle: 'AC106CON', driver: 'Sarah Connor', date: '2024-05-14 07:15 AM', status: 'Failed', defects: 3 },
-  { id: 'INS-1044', vehicle: 'TRK-99', driver: 'Emily Davis', date: '2024-05-13 08:00 AM', status: 'Pass w/ Defects', defects: 1 },
-  { id: 'INS-1045', vehicle: 'AP105', driver: 'Mike Johnson', date: '2024-05-13 06:45 AM', status: 'Passed', defects: 0 },
-];
+import { useInspections } from '../../context/InspectionContext';
 
 export default function InspectionsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024;
 
-  const [inspections, setInspections] = useState(DUMMY_INSPECTIONS);
+  const { inspections } = useInspections();
   const [searchQuery, setSearchQuery] = useState('');
 
+  const inspectionsWithDefects = useMemo(() => inspections.map(i => ({
+    ...i,
+    defects: i.checklist ? Object.values(i.checklist).filter(passed => !passed).length : 0
+  })), [inspections]);
+
   const filteredInspections = useMemo(() => {
-    if (!searchQuery) return inspections;
+    if (!searchQuery) return inspectionsWithDefects;
     const lowerQuery = searchQuery.toLowerCase();
-    return inspections.filter(i => 
-      i.vehicle.toLowerCase().includes(lowerQuery) || 
-      i.driver.toLowerCase().includes(lowerQuery) ||
-      i.id.toLowerCase().includes(lowerQuery)
+    return inspectionsWithDefects.filter(i => 
+      (i.vehicle || '').toLowerCase().includes(lowerQuery) || 
+      (i.driver || '').toLowerCase().includes(lowerQuery) ||
+      (i.id || '').toLowerCase().includes(lowerQuery)
     );
-  }, [inspections, searchQuery]);
+  }, [inspectionsWithDefects, searchQuery]);
 
   const handleAction = (id: string) => {
     router.push(`/(manager)/inspections/${id}` as any);
@@ -38,19 +40,21 @@ export default function InspectionsScreen() {
       
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View>
-          <Text style={styles.pageTitle}>Inspections (DVIR)</Text>
-          <Text style={styles.pageSubtitle}>Daily vehicle inspection reports and compliance logs</Text>
+          <Text style={styles.pageTitle}>{t('insp_title', 'Inspections (DVIR)')}</Text>
+          <Text style={styles.pageSubtitle}>{t('insp_subtitle', 'Daily vehicle inspection reports and compliance logs')}</Text>
         </View>
         <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/(manager)/inspections/all' as any)}>
           <Ionicons name="list-outline" size={20} color="#fff" />
-          <Text style={styles.primaryBtnText}>All Inspections</Text>
+          <Text style={styles.primaryBtnText}>{t('insp_all', 'All Inspections')}</Text>
         </TouchableOpacity>
       </View>
 
       <SummaryBox items={[
-        { label: 'Today', count: 12, icon: 'calendar', color: '#ffffff' },
-        { label: 'Passed', count: 10, icon: 'checkmark-circle', color: '#34D399' },
-        { label: 'Failed', count: 2, icon: 'close-circle', color: '#F87171' }
+        { label: t('insp_stat_total', 'Total Logs'), count: inspectionsWithDefects.length, icon: 'clipboard', color: '#60A5FA' },
+        { label: t('insp_stat_today', 'Today'), count: inspectionsWithDefects.filter(i => i.date === new Date().toISOString().split('T')[0]).length, icon: 'calendar', color: '#ffffff' },
+        { label: t('insp_stat_passed', 'Passed'), count: inspectionsWithDefects.filter(i => i.status === 'Passed').length, icon: 'checkmark-circle', color: '#34D399' },
+        { label: t('insp_stat_flagged', 'Flagged'), count: inspectionsWithDefects.filter(i => i.status === 'Flagged' || i.defects > 0).length, icon: 'alert-circle', color: '#FBBF24' },
+        { label: t('insp_stat_failed', 'Failed'), count: inspectionsWithDefects.filter(i => i.status === 'Failed').length, icon: 'close-circle', color: '#F87171' }
       ]} />
 
       <View style={styles.actionBar}>
@@ -58,7 +62,7 @@ export default function InspectionsScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput 
             style={styles.searchInput} 
-            placeholder="Search by vehicle or driver..." 
+            placeholder={t('insp_search', 'Search by vehicle or driver...')} 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -68,16 +72,16 @@ export default function InspectionsScreen() {
         </View>
       </View>
 
-      <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 }}>Recent Inspections</Text>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 16 }}>{t('insp_recent', 'Recent Inspections')}</Text>
       <View style={styles.card}>
         {!isMobile && (
           <View style={styles.tableHeader}>
-            <Text style={[styles.th, { flex: 1 }]}>ID</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Vehicle</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Driver</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Date & Time</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Defects</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Status</Text>
+            <Text style={[styles.th, { flex: 1.2 }]}>{t('insp_col_type', 'Type')}</Text>
+            <Text style={[styles.th, { flex: 1.8 }]}>{t('insp_col_vehicle', 'Vehicle')}</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>{t('insp_col_driver', 'Driver')}</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>{t('insp_col_datetime', 'Date & Time')}</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('insp_col_defects', 'Defects')}</Text>
+            <Text style={[styles.th, { flex: 1.2 }]}>{t('insp_col_status', 'Status')}</Text>
             <View style={{ width: 40 }} />
           </View>
         )}
@@ -89,35 +93,35 @@ export default function InspectionsScreen() {
             onPress={() => handleAction(inspection.id)}
           >
             
-            <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>ID</Text>}
-              <Text style={[styles.cellText, { fontWeight: '600', color: '#043094' }]}>{inspection.id}</Text>
+            <View style={[styles.td, { flex: isMobile ? undefined : 1.2 }, isMobile && styles.mobileDataRow]}>
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_type', 'Type')}</Text>}
+              <Text style={[styles.cellText, { fontWeight: '600', color: '#043094' }]} numberOfLines={1}>{inspection.type || 'Daily DVIR'}</Text>
+            </View>
+
+            <View style={[styles.td, { flex: isMobile ? undefined : 1.8 }, isMobile && styles.mobileDataRow]}>
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_vehicle', 'Vehicle')}</Text>}
+              <Text style={[styles.cellText, { fontWeight: '600' }]} numberOfLines={1}>{inspection.vehicle}</Text>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Vehicle</Text>}
-              <Text style={[styles.cellText, { fontWeight: '600' }]}>{inspection.vehicle}</Text>
-            </View>
-
-            <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Driver</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_driver', 'Driver')}</Text>}
               <Text style={styles.cellText}>{inspection.driver}</Text>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Date</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_datetime', 'Date & Time')}</Text>}
               <Text style={styles.cellText}>{inspection.date}</Text>
             </View>
             
             <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Defects</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_defects', 'Defects')}</Text>}
               <View style={[styles.defectBadge, inspection.defects > 0 && styles.defectBadgeActive]}>
                  <Text style={[styles.defectText, inspection.defects > 0 && styles.defectTextActive]}>{inspection.defects}</Text>
               </View>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Status</Text>}
+              {isMobile && <Text style={styles.mobileLabel}>{t('insp_col_status', 'Status')}</Text>}
               <View style={[
                 styles.statusBadge, 
                 inspection.status === 'Passed' ? styles.statusPassed : 
@@ -129,7 +133,7 @@ export default function InspectionsScreen() {
                   inspection.status === 'Passed' ? styles.statusPassedText : 
                   inspection.status === 'Failed' ? styles.statusFailedText : 
                   styles.statusWarningText
-                ]}>{inspection.status}</Text>
+                ]}>{t(`insp_status_${inspection.status.toLowerCase().replace(/[^a-z]/g, '_').replace(/_+/g, '_').replace(/_$/, '')}`, inspection.status)}</Text>
               </View>
             </View>
 
@@ -165,11 +169,11 @@ const styles = StyleSheet.create({
   searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 8, paddingHorizontal: 12, height: 40, flex: 1, minWidth: 250, maxWidth: 400 },
   searchInput: { flex: 1, marginLeft: 8, color: '#111827' },
   card: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
-  tableHeader: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', minWidth: 0 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   tableRowMobile: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 20 },
-  td: { justifyContent: 'center' },
+  td: { justifyContent: 'center', minWidth: 0 },
   mobileDataRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
   mobileLabel: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
   cellText: { fontSize: 14, color: '#374151' },

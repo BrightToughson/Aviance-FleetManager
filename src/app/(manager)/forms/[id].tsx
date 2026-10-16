@@ -111,7 +111,7 @@ export default function FormDetailScreen() {
           <View style={styles.headerLeft}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
               <View style={[styles.statusIndicator, form.active ? styles.statusActive : styles.statusInactive]} />
-              <Text style={styles.idText}>{form.id}</Text>
+              <Text style={styles.idText}>{form.active ? 'Active Form' : 'Archived Form'}</Text>
             </View>
             <Text style={styles.title}>{form.title}</Text>
           </View>
@@ -220,7 +220,7 @@ export default function FormDetailScreen() {
         formSubmissions.map(sub => (
           <View key={sub.id} style={styles.submissionCard}>
             <View style={styles.subHeader}>
-              <Text style={styles.subId}>{sub.id}</Text>
+              <Text style={styles.subId}>Response Entry</Text>
               <Text style={styles.subDate}>{new Date(sub.submittedAt).toLocaleString()}</Text>
             </View>
             <View style={styles.divider} />

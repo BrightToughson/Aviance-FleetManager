@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 export interface FormField {
   name: string;
   label: string;
-  type: 'text' | 'select' | 'number' | 'image';
+  type: 'text' | 'textarea' | 'select' | 'number' | 'image' | 'date';
   placeholder?: string;
   options?: string[];
   required?: boolean;
@@ -21,12 +21,13 @@ interface FormModalProps {
   visible: boolean;
   onClose: () => void;
   title: string;
+  description?: string;
   fields: FormField[];
   onSubmit: (data: any) => void;
   submitText?: string;
 }
 
-export default function FormModal({ visible, onClose, title, fields, onSubmit, submitText = 'Save' }: FormModalProps) {
+export default function FormModal({ visible, onClose, title, description, fields, onSubmit, submitText = 'Save' }: FormModalProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [imageModalField, setImageModalField] = useState<string | null>(null);
@@ -70,14 +71,30 @@ export default function FormModal({ visible, onClose, title, fields, onSubmit, s
     }
   }, [visible, fields]);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const next = { ...prev, [name]: value };
+      if (name === 'role' && (value === 'Driver' || value === 'Manager')) {
+        next.contact_type = 'Internal';
+      }
+      return next;
+    });
   };
 
-  const handleSubmit = () => {
-    onSubmit(formData);
-    setFormData({});
-    onClose();
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    try {
+      setIsSubmitting(true);
+      await Promise.resolve(onSubmit(formData));
+      setFormData({});
+      onClose();
+    } catch (err) {
+      console.error("Form submission failed:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -91,7 +108,10 @@ export default function FormModal({ visible, onClose, title, fields, onSubmit, s
         <View style={styles.modalContainer}>
           
           <View style={styles.header}>
-            <Text style={styles.title}>{title}</Text>
+            <View style={{ flex: 1, paddingRight: 16 }}>
+              <Text style={styles.title}>{title}</Text>
+              {description && <Text style={styles.description}>{description}</Text>}
+            </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
@@ -144,14 +164,29 @@ export default function FormModal({ visible, onClose, title, fields, onSubmit, s
                       )}
                     </TouchableOpacity>
                   </View>
+                ) : field.type === 'date' && Platform.OS === 'web' ? (
+                  React.createElement('input', {
+                    type: 'date',
+                    value: formData[field.name] || '',
+                    onChange: (e: any) => handleChange(field.name, e.target.value),
+                    onClick: (e: any) => { try { e.target.showPicker(); } catch(err) {} },
+                    style: {
+                      borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8, padding: '0 12px',
+                      height: 44, fontSize: 15, color: '#111827', backgroundColor: '#fff', cursor: 'pointer',
+                      width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box'
+                    }
+                  })
                 ) : (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, field.type === 'textarea' && styles.textarea]}
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
                     value={formData[field.name] || ''}
                     onChangeText={(text) => handleChange(field.name, text)}
                     keyboardType={field.type === 'number' ? 'numeric' : 'default'}
                     placeholderTextColor="#9CA3AF"
+                    multiline={field.type === 'textarea'}
+                    numberOfLines={field.type === 'textarea' ? 4 : 1}
+                    {...Platform.select({ web: { type: field.type === 'date' ? 'date' : 'text' } as any, default: {} })}
                     // @ts-ignore
                     outlineStyle="none"
                   />
@@ -165,8 +200,12 @@ export default function FormModal({ visible, onClose, title, fields, onSubmit, s
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit}>
-              <Text style={styles.submitBtnText}>{submitText}</Text>
+            <TouchableOpacity 
+              style={[styles.submitBtn, isSubmitting && { opacity: 0.7 }]} 
+              onPress={handleSubmit}
+              disabled={isSubmitting}
+            >
+              <Text style={styles.submitBtnText}>{isSubmitting ? 'Saving...' : submitText}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -279,6 +318,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  description: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 18,
+  },
   closeBtn: {
     padding: 4,
   },
@@ -306,6 +351,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111827',
     backgroundColor: '#fff',
+  },
+  textarea: {
+    height: 100,
+    textAlignVertical: 'top',
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   customSelectContainer: {
     position: 'relative',

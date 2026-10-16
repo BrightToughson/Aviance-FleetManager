@@ -4,44 +4,40 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import FormModal, { FormField } from '../../../components/FormModal';
 
-const DUMMY_INSPECTIONS = [
-  { id: 'INS-1042', vehicle: 'AP101', driver: 'John Smith', date: '2024-05-14 06:30 AM', status: 'Passed', defects: 0 },
-  { id: 'INS-1043', vehicle: 'AC106CON', driver: 'Sarah Connor', date: '2024-05-14 07:15 AM', status: 'Failed', defects: 3 },
-  { id: 'INS-1044', vehicle: 'TRK-99', driver: 'Emily Davis', date: '2024-05-13 08:00 AM', status: 'Pass w/ Defects', defects: 1 },
-  { id: 'INS-1045', vehicle: 'AP105', driver: 'Mike Johnson', date: '2024-05-13 06:45 AM', status: 'Passed', defects: 0 },
-  { id: 'INS-1046', vehicle: 'T-1000', driver: 'Arnold S.', date: '2024-05-12 06:15 AM', status: 'Passed', defects: 0 },
-  { id: 'INS-1047', vehicle: 'TRK-88', driver: 'Tom Hanks', date: '2024-05-12 07:00 AM', status: 'Passed', defects: 0 },
-];
+import { useInspections } from '../../../context/InspectionContext';
 
 export default function AllInspectionsScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024;
 
-  const [inspections, setInspections] = useState(DUMMY_INSPECTIONS);
+  const { inspections, addInspection } = useInspections();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
 
-  const filteredInspections = useMemo(() => {
-    if (!searchQuery) return inspections;
-    const lowerQuery = searchQuery.toLowerCase();
-    return inspections.filter(i => 
-      i.vehicle.toLowerCase().includes(lowerQuery) || 
-      i.driver.toLowerCase().includes(lowerQuery) ||
-      i.id.toLowerCase().includes(lowerQuery)
-    );
-  }, [inspections, searchQuery]);
+  const inspectionsWithDefects = useMemo(() => inspections.map(i => ({
+    ...i,
+    defects: i.checklist ? Object.values(i.checklist).filter(passed => !passed).length : 0
+  })), [inspections]);
 
-  const handleAddInspection = (data: any) => {
-    const newInspection = {
-      id: `INS-20${Math.floor(Math.random() * 100)}`,
-      vehicle: data.vehicle || 'Unknown',
-      driver: data.driver || 'Unknown',
-      date: new Date().toISOString().split('T')[0],
-      status: data.status || 'Pass',
-      defects: data.status === 'Defect Found' ? 1 : 0
-    };
-    setInspections([newInspection, ...inspections]);
+  const filteredInspections = useMemo(() => {
+    if (!searchQuery) return inspectionsWithDefects;
+    const lowerQuery = searchQuery.toLowerCase();
+    return inspectionsWithDefects.filter(i => 
+      (i.vehicle || '').toLowerCase().includes(lowerQuery) || 
+      (i.driver || '').toLowerCase().includes(lowerQuery) ||
+      (i.id || '').toLowerCase().includes(lowerQuery)
+    );
+  }, [inspectionsWithDefects, searchQuery]);
+
+  const handleAddInspection = async (data: any) => {
+    await addInspection({
+      status: data.status === 'Defect Found' ? 'Flagged' : data.status === 'Fail' ? 'Failed' : 'Passed',
+      notes: `Vehicle: ${data.vehicle}, Driver: ${data.driver}`,
+      vehicle: data.vehicle,
+      type: 'Manual',
+    });
+    setIsModalVisible(false);
   };
 
   const handleAction = (id: string) => {
@@ -94,12 +90,12 @@ export default function AllInspectionsScreen() {
         <View style={styles.card}>
           {!isMobile && (
             <View style={styles.tableHeader}>
-              <Text style={[styles.th, { flex: 1 }]}>ID</Text>
-              <Text style={[styles.th, { flex: 1.5 }]}>Vehicle</Text>
+              <Text style={[styles.th, { flex: 1.2 }]}>Type</Text>
+              <Text style={[styles.th, { flex: 1.8 }]}>Vehicle</Text>
               <Text style={[styles.th, { flex: 1.5 }]}>Driver</Text>
               <Text style={[styles.th, { flex: 1.5 }]}>Date & Time</Text>
               <Text style={[styles.th, { flex: 1 }]}>Defects</Text>
-              <Text style={[styles.th, { flex: 1.5 }]}>Status</Text>
+              <Text style={[styles.th, { flex: 1.2 }]}>Status</Text>
               <View style={{ width: 40 }} />
             </View>
           )}
@@ -111,9 +107,9 @@ export default function AllInspectionsScreen() {
               onPress={() => handleAction(inspection.id)}
             >
               
-              <View style={[styles.td, { flex: isMobile ? undefined : 1 }, isMobile && styles.mobileDataRow]}>
-                {isMobile && <Text style={styles.mobileLabel}>ID</Text>}
-                <Text style={[styles.cellText, { fontWeight: '600', color: '#043094' }]}>{inspection.id}</Text>
+              <View style={[styles.td, { flex: isMobile ? undefined : 1.2 }, isMobile && styles.mobileDataRow]}>
+                {isMobile && <Text style={styles.mobileLabel}>Type</Text>}
+                <Text style={[styles.cellText, { fontWeight: '600', color: '#043094' }]} numberOfLines={1}>{inspection.type || 'Daily DVIR'}</Text>
               </View>
 
               <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
@@ -196,11 +192,11 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, marginLeft: 8, color: '#111827' },
   
   card: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
-  tableHeader: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' },
+  tableHeader: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', alignItems: 'center' },
+  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', minWidth: 0 },
   tableRow: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', alignItems: 'center' },
   tableRowMobile: { flexDirection: 'column', alignItems: 'flex-start' },
-  td: { justifyContent: 'center' },
+  td: { justifyContent: 'center', minWidth: 0 },
   mobileDataRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 8, alignItems: 'center' },
   mobileLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280', width: 100 },
   cellText: { fontSize: 14, color: '#111827' },

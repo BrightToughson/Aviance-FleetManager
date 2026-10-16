@@ -7,28 +7,26 @@ import SummaryBox from '../../components/SummaryBox';
 import { useAlerts } from '../../context/AlertsContext';
 import { useIssues } from '../../context/IssuesContext';
 import { useServices } from '../../context/ServicesContext';
+import { useToast } from '../../context/ToastContext';
+import { useTranslation } from 'react-i18next';
 
 export default function IssuesScreen() {
   const { width } = useWindowDimensions();
+  const { t } = useTranslation();
   const isMobile = width < 1024;
   const router = useRouter();
   const { addAlert } = useAlerts();
   const { issues, addIssue, updateIssue } = useIssues();
   const { addService } = useServices();
+  const { showToast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'Reported' | 'Inspection'>('Reported');
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [flagModalVisible, setFlagModalVisible] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState('');
 
   const filteredIssues = useMemo(() => {
     let list = issues;
-    if (activeTab === 'Inspection') {
-      list = issues.filter(i => i.origin === 'Inspection');
-    } else {
-      list = issues.filter(i => i.origin !== 'Inspection');
-    }
     
     if (!searchQuery) return list;
     const lowerQuery = searchQuery.toLowerCase();
@@ -37,7 +35,7 @@ export default function IssuesScreen() {
       i.issue.toLowerCase().includes(lowerQuery) ||
       i.id.toLowerCase().includes(lowerQuery)
     );
-  }, [issues, searchQuery, activeTab]);
+  }, [issues, searchQuery]);
 
   const handleAddIssue = (data: any) => {
     addIssue({
@@ -83,7 +81,7 @@ export default function IssuesScreen() {
   ];
 
   const flagFields: FormField[] = [
-    { name: 'serviceDetails', label: 'Service Details', type: 'text', placeholder: 'What needs to be serviced?', required: true }
+    { name: 'serviceDetails', label: 'Service Details', type: 'textarea', placeholder: 'Describe what needs to be serviced...', required: true }
   ];
 
   const handleFlagForService = (data: any) => {
@@ -98,6 +96,7 @@ export default function IssuesScreen() {
       });
       updateIssue(issue.id, { status: 'In Progress' });
       addAlert('Flagged for Service', `Inspection issue for ${issue.vehicle} has been flagged for service.`, 'system');
+      showToast(`Issue ${issue.id} has been flagged for service!`, 'success');
     }
     setFlagModalVisible(false);
   };
@@ -107,37 +106,30 @@ export default function IssuesScreen() {
       
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View>
-          <Text style={styles.pageTitle}>Issues</Text>
-          <Text style={styles.pageSubtitle}>Track defects, driver reports, and repair statuses</Text>
+          <Text style={styles.pageTitle}>{t('m_issues_title', 'Issues')}</Text>
+          <Text style={styles.pageSubtitle}>{t('m_issues_subtitle', 'Track defects, driver reports, and repair statuses')}</Text>
         </View>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => setIsModalVisible(true)}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/(manager)/issues/new')}>
           <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.primaryBtnText}>Report Issue</Text>
+          <Text style={styles.primaryBtnText}>{t('m_issues_report_btn', 'Report Issue')}</Text>
         </TouchableOpacity>
       </View>
 
       <SummaryBox items={[
-        { label: 'Open', count: issues.filter(i => i.status === 'Open').length, icon: 'warning', color: '#F87171' },
-        { label: 'High Priority', count: issues.filter(i => i.priority === 'High' && i.status !== 'Resolved').length, icon: 'alert-circle', color: '#EF4444' },
-        { label: 'In Progress', count: issues.filter(i => i.status === 'In Progress').length, icon: 'construct', color: '#F59E0B' },
-        { label: 'Resolved (30d)', count: issues.filter(i => i.status === 'Resolved').length, icon: 'checkmark-circle', color: '#34D399' }
+        { label: t('m_issues_open', 'Open'), count: issues.filter(i => i.status === 'Open').length, icon: 'warning', color: '#F87171' },
+        { label: t('m_issues_high_priority', 'High Priority'), count: issues.filter(i => i.priority === 'High' && i.status !== 'Resolved').length, icon: 'alert-circle', color: '#EF4444' },
+        { label: t('m_issues_in_progress', 'In Progress'), count: issues.filter(i => i.status === 'In Progress').length, icon: 'construct', color: '#F59E0B' },
+        { label: t('m_issues_resolved', 'Resolved (30d)'), count: issues.filter(i => i.status === 'Resolved').length, icon: 'checkmark-circle', color: '#34D399' }
       ]} />
 
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'Reported' && styles.tabActive]} onPress={() => setActiveTab('Reported')}>
-          <Text style={[styles.tabText, activeTab === 'Reported' && styles.tabTextActive]}>Reported Issues</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'Inspection' && styles.tabActive]} onPress={() => setActiveTab('Inspection')}>
-          <Text style={[styles.tabText, activeTab === 'Inspection' && styles.tabTextActive]}>Inspection Flags</Text>
-        </TouchableOpacity>
-      </View>
+
 
       <View style={styles.actionBar}>
         <View style={styles.searchBox}>
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput 
             style={styles.searchInput} 
-            placeholder="Search issues or vehicles..." 
+            placeholder={t('m_issues_search_ph', 'Search issues or vehicles...')}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -162,8 +154,8 @@ export default function IssuesScreen() {
               
               <View style={styles.issueCardContent}>
                 <View style={styles.issueHeader}>
-                  <View style={styles.issueIdBadge}>
-                    <Text style={styles.issueIdText}>{issue.id}</Text>
+                  <View style={[styles.issueIdBadge, { backgroundColor: '#F3F4F6' }]}>
+                    <Text style={[styles.issueIdText, { color: '#4B5563', fontWeight: '600' }]}>{issue.priority} Priority</Text>
                   </View>
                   <View style={[
                     styles.statusBadge, 
@@ -199,9 +191,9 @@ export default function IssuesScreen() {
               </View>
 
               <View style={styles.chevronContainer}>
-                {activeTab === 'Inspection' && issue.status !== 'In Progress' ? (
+                {issue.origin === 'Inspection' && issue.status !== 'In Progress' ? (
                   <TouchableOpacity style={styles.actionBtn} onPress={() => onFlagPress(issue.id)}>
-                    <Text style={styles.actionBtnText}>Flag for Service</Text>
+                    <Text style={styles.actionBtnText}>{t('m_issues_flag_btn', 'Flag for Service')}</Text>
                   </TouchableOpacity>
                 ) : (
                   <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
@@ -211,22 +203,14 @@ export default function IssuesScreen() {
           ))}
         </View>
       </View>
-      
-      <FormModal 
-        visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        title="Report New Issue"
-        fields={modalFields}
-        onSubmit={handleAddIssue}
-      />
-      
       <FormModal 
         visible={flagModalVisible}
         onClose={() => setFlagModalVisible(false)}
-        title="Flag for Service"
+        title="Flag for Maintenance"
+        description="Provide details about the required maintenance. This will automatically create a new service record."
         fields={flagFields}
         onSubmit={handleFlagForService}
-        submitText="Flag"
+        submitText="Flag Issue"
       />
     </ScrollView>
   );

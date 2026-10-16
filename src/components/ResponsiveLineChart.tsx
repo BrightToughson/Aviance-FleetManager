@@ -19,20 +19,28 @@ export default function ResponsiveLineChart({ data, width, height, color = '#0EA
       data={data}
       width={chartWidth}
       height={height}
-      thickness={2}
+      thickness={2.5}
       color={color}
       dataPointsColor={color}
+      dataPointsRadius={4}
       spacing={spacing}
-      initialSpacing={10}
+      initialSpacing={14}
       yAxisColor="#E5E7EB"
       xAxisColor="#E5E7EB"
-      yAxisTextStyle={{ color: '#6B7280', fontSize: 10 }}
-      xAxisLabelTextStyle={{ color: '#6B7280', fontSize: 10 }}
-      rulesColor="#F3F4F6"
+      yAxisTextStyle={{ color: '#94A3B8', fontSize: 10, fontWeight: '500' }}
+      xAxisLabelTextStyle={{ color: '#64748B', fontSize: 10, fontWeight: '600' }}
+      rulesColor="#F1F5F9"
       rulesType="solid"
       hideRules={false}
-      curved={false}
-      isAnimated={false}
+      curved={true}
+      areaChart={true}
+      startFillColor={color}
+      endFillColor={color}
+      startOpacity={0.24}
+      endOpacity={0.02}
+      isAnimated={true}
+      animationDuration={850}
+      animateOnDataChange={true}
     />
   );
 }

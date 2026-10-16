@@ -3,30 +3,51 @@ import { View, Text, StyleSheet, TextInput, ScrollView, TouchableOpacity } from 
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-const mockDatabase = [
-  { id: '1', type: 'Vehicle', title: '2022 Ford Transit', icon: 'car-outline', route: '/(manager)/vehicles' },
-  { id: '2', type: 'Driver', title: 'John Doe', icon: 'person-outline', route: '/(manager)/drivers' },
-  { id: '3', type: 'Assignment', title: 'Route 4 Delivery', icon: 'map-outline', route: '/(manager)/assignments' },
-  { id: '4', type: 'Maintenance', title: 'Oil Change for Vehicle 102', icon: 'build-outline', route: '/(manager)/reminders' },
-  { id: '5', type: 'Alert', title: 'Pending Time-off Request', icon: 'notifications-outline', route: '/(manager)/alerts' },
-  { id: '6', type: 'Issue', title: 'Brake Noise Reported', icon: 'warning-outline', route: '/(manager)/issues' },
-  { id: '7', type: 'Report', title: 'Monthly Fuel Usage', icon: 'bar-chart-outline', route: '/(manager)/reports' },
-  { id: '8', type: 'Inspection', title: 'Failed Pre-use Check', icon: 'clipboard-outline', route: '/(manager)/inspections' }
-];
+import { useVehicles } from '../../context/VehicleContext';
+import { useAssignments } from '../../context/AssignmentsContext';
+import { useTranslation } from 'react-i18next';
+
+import { useUser } from '@clerk/expo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ManagerSearchScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
+  const { user } = useUser();
   const [query, setQuery] = useState('');
-  const [recentSearches, setRecentSearches] = useState(['John Doe', 'Route 4 Delivery', 'Monthly Fuel Usage']);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const { vehicles } = useVehicles();
+  const { assignments } = useAssignments();
 
-  const filteredResults = mockDatabase.filter(item => 
-    item.title.toLowerCase().includes(query.toLowerCase()) || 
-    item.type.toLowerCase().includes(query.toLowerCase())
+  React.useEffect(() => {
+    if (user?.id) {
+      AsyncStorage.getItem(`@manager_recent_searches_${user.id}`)
+        .then(res => {
+          if (res) setRecentSearches(JSON.parse(res));
+          else setRecentSearches([]);
+        })
+        .catch(console.error);
+    } else {
+      setRecentSearches([]);
+    }
+  }, [user?.id]);
+
+  const searchDatabase = [
+    ...(vehicles || []).map((v: any) => ({ id: v.id, type: 'Vehicle', title: v.name || v.make, icon: 'car-outline', route: `/(manager)/vehicles/${v.id}` })),
+    ...(assignments || []).map((a: any) => ({ id: a.id, type: 'Assignment', title: `${a.pickupLocation} to ${a.dropoffLocation}`, icon: 'map-outline', route: `/(manager)/assignments/${a.id}` }))
+  ];
+
+  const filteredResults = searchDatabase.filter(item => 
+    item.title && item.title.toLowerCase().includes(query.toLowerCase()) || 
+    item.type && item.type.toLowerCase().includes(query.toLowerCase())
   );
-
   const handleSelectResult = (item: any) => {
     if (!recentSearches.includes(item.title)) {
-      setRecentSearches(prev => [item.title, ...prev].slice(0, 10));
+      const updated = [item.title, ...recentSearches].slice(0, 10);
+      setRecentSearches(updated);
+      if (user?.id) {
+        AsyncStorage.setItem(`@manager_recent_searches_${user.id}`, JSON.stringify(updated)).catch(console.error);
+      }
     }
     router.replace(item.route as any);
     setQuery('');
@@ -34,6 +55,9 @@ export default function ManagerSearchScreen() {
 
   const handleClearRecents = () => {
     setRecentSearches([]);
+    if (user?.id) {
+      AsyncStorage.removeItem(`@manager_recent_searches_${user.id}`).catch(console.error);
+    }
   };
 
   return (
@@ -46,7 +70,7 @@ export default function ManagerSearchScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.input}
-            placeholder="Search drivers, vehicles, assignments..."
+            placeholder={t('m_search_placeholder', 'Search drivers, vehicles, assignments...')}
             placeholderTextColor="#9CA3AF"
             autoFocus
             value={query}
@@ -64,10 +88,10 @@ export default function ManagerSearchScreen() {
         {!query ? (
           <View>
             <View style={styles.recentHeader}>
-              <Text style={styles.sectionTitle}>Recent Searches</Text>
+              <Text style={styles.sectionTitle}>{t('m_search_recent', 'Recent Searches')}</Text>
               {recentSearches.length > 0 && (
                 <TouchableOpacity onPress={handleClearRecents}>
-                  <Text style={styles.clearText}>Clear</Text>
+                  <Text style={styles.clearText}>{t('m_search_clear', 'Clear')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -84,12 +108,12 @@ export default function ManagerSearchScreen() {
                 </TouchableOpacity>
               ))
             ) : (
-              <Text style={styles.emptyRecentText}>No recent searches</Text>
+              <Text style={styles.emptyRecentText}>{t('m_search_no_recent', 'No recent searches')}</Text>
             )}
           </View>
         ) : (
           <View>
-            <Text style={styles.sectionTitle}>Search Results</Text>
+            <Text style={styles.sectionTitle}>{t('m_search_results', 'Search Results')}</Text>
             {filteredResults.length > 0 ? (
               filteredResults.map((item) => (
                 <TouchableOpacity 
@@ -110,7 +134,7 @@ export default function ManagerSearchScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="search-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No results found for &quot;{query}&quot;</Text>
+                <Text style={styles.emptyText}>{t('m_search_no_results', 'No results found for')}{` "${query}"`}</Text>
               </View>
             )}
           </View>

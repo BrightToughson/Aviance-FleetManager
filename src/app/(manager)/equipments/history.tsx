@@ -2,21 +2,16 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 export default function HistoryScreen() {
   const { id, type } = useLocalSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
   const isStatus = type === 'status';
 
-  // Mock data
-  const historyData = isStatus ? [
-    { id: 1, date: 'Oct 25, 2026 - 14:30', title: 'Status Changed to In Shop', notes: 'Scheduled maintenance for brakes.', author: 'John Doe' },
-    { id: 2, date: 'Oct 20, 2026 - 09:15', title: 'Status Changed to Active', notes: 'Equipment received and inspected.', author: 'Jane Smith' },
-    { id: 3, date: 'Sep 10, 2026 - 11:00', title: 'Status Changed to Out of Service', notes: 'Reported engine issues by operator.', author: 'Mike Ross' },
-  ] : [
-    { id: 1, date: 'Oct 25, 2026 - 14:30', title: 'Assigned to Texas Yard', notes: 'Transferred for new project.', author: 'John Doe' },
-    { id: 2, date: 'Oct 20, 2026 - 09:15', title: 'Assigned to Alabama Yard', notes: 'Initial assignment upon purchase.', author: 'Jane Smith' },
-  ];
+  // Cleared mock data
+  const historyData: any[] = [];
 
   return (
     <View style={styles.container}>
@@ -25,8 +20,8 @@ export default function HistoryScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View>
-          <Text style={styles.title}>{isStatus ? 'Status History' : 'Group Assignment History'}</Text>
-          <Text style={styles.subtitle}>ID: {id || 'N/A'}</Text>
+          <Text style={styles.title}>{isStatus ? t('equip_hist_status', 'Status History') : t('equip_hist_group', 'Group Assignment History')}</Text>
+          <Text style={styles.subtitle}>{t('common_id', 'ID')}: {id || 'N/A'}</Text>
         </View>
       </View>
       
@@ -51,7 +46,7 @@ export default function HistoryScreen() {
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>{item.author.charAt(0)}</Text>
                   </View>
-                  <Text style={styles.author}>Updated by {item.author}</Text>
+                  <Text style={styles.author}>{t('equip_hist_updated_by', 'Updated by {{author}}', { author: item.author })}</Text>
                 </View>
               </View>
             </View>

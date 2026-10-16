@@ -6,21 +6,32 @@ import * as DocumentPicker from 'expo-document-picker';
 import FormModal, { FormField } from '../../components/FormModal';
 import SummaryBox from '../../components/SummaryBox';
 import { usePersonnel } from '../../context/PersonnelContext';
+import { useSearch } from '../../context/SearchContext';
+import { useTranslation } from 'react-i18next';
+import { useUser } from '@clerk/expo';
 
 export default function ContactsScreen() {
   const { width } = useWindowDimensions();
+  const { t } = useTranslation();
   const router = useRouter();
   const isMobile = width < 1024;
+  const { user } = useUser();
 
-  const { personnel, addPerson } = usePersonnel();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { personnel, addPerson, deletePersons } = usePersonnel();
+  const { searchQuery, setSearchQuery } = useSearch();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [contactGroup, setContactGroup] = useState('All');
   const [departmentFilter, setDepartmentFilter] = useState('All');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
+  // Exclude the current logged-in manager so they are not shown as a contact to themselves
+  const directoryPersonnel = useMemo(() => {
+    return personnel.filter(c => c.id !== user?.id && (!user?.primaryEmailAddress?.emailAddress || c.email !== user.primaryEmailAddress.emailAddress));
+  }, [personnel, user]);
+
   const filteredContacts = useMemo(() => {
-    let result = personnel;
+    let result = directoryPersonnel;
     if (contactGroup !== 'All') {
       result = result.filter(c => c.role === contactGroup);
     }
@@ -34,7 +45,7 @@ export default function ContactsScreen() {
       c.role.toLowerCase().includes(lowerQuery) ||
       c.email.toLowerCase().includes(lowerQuery)
     );
-  }, [personnel, searchQuery, contactGroup, departmentFilter]);
+  }, [directoryPersonnel, searchQuery, contactGroup, departmentFilter]);
   const handleAddContact = (data: any) => {
     addPerson({
       name: data.name || 'New Contact',
@@ -42,7 +53,7 @@ export default function ContactsScreen() {
       department: data.department || 'Operations',
       phone: data.phone || '(555) 000-0000',
       email: data.email || 'unknown@example.com',
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150&q=80'
+      avatar: ''
     });
   };
 
@@ -68,6 +79,34 @@ export default function ContactsScreen() {
       window.URL.revokeObjectURL(url);
     } else {
       Alert.alert('Exported', `Contacts list has been exported to your documents.`);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredContacts.length && filteredContacts.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredContacts.map(c => c.id));
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    const confirmDelete = () => {
+      deletePersons(selectedIds);
+      setSelectedIds([]);
+      if (Platform.OS === 'web') window.alert('Contacts deleted.');
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Are you sure you want to delete ${selectedIds.length} contacts?`)) confirmDelete();
+    } else {
+      Alert.alert('Delete Contacts', `Are you sure you want to delete ${selectedIds.length} contacts?`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete }
+      ]);
     }
   };
 
@@ -113,20 +152,20 @@ export default function ContactsScreen() {
       
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View>
-          <Text style={styles.pageTitle}>Contacts</Text>
-          <Text style={styles.pageSubtitle}>Directory of all internal and external personnel</Text>
+          <Text style={styles.pageTitle}>{t('m_contacts_title', 'Contacts')}</Text>
+          <Text style={styles.pageSubtitle}>{t('m_contacts_subtitle', 'Directory of all internal and external personnel')}</Text>
         </View>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => setIsModalVisible(true)}>
+        <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push('/(manager)/contacts/new' as any)}>
           <Ionicons name="person-add" size={20} color="#fff" />
-          <Text style={styles.primaryBtnText}>Add Contact</Text>
+          <Text style={styles.primaryBtnText}>{t('m_contacts_add_btn', 'Add Contact')}</Text>
         </TouchableOpacity>
       </View>
 
       <SummaryBox items={[
-        { label: 'Total Contacts', count: personnel.length, icon: 'people', color: '#ffffff' },
-        { label: 'Drivers', count: personnel.filter(p => p.role === 'Driver').length, icon: 'car', color: '#34D399' },
-        { label: 'Staff/Admins', count: personnel.filter(p => ['Staff', 'Admin', 'Manager'].includes(p.role)).length, icon: 'briefcase', color: '#3B82F6' },
-        { label: 'Suppliers', count: personnel.filter(p => p.role === 'Supplier').length, icon: 'business', color: '#F59E0B' }
+        { label: t('m_contacts_total', 'Total Contacts'), count: directoryPersonnel.length, icon: 'people', color: '#ffffff' },
+        { label: t('m_contacts_drivers', 'Drivers'), count: directoryPersonnel.filter(p => p.role === 'Driver').length, icon: 'car', color: '#34D399' },
+        { label: t('m_contacts_staff', 'Staff/Admins'), count: directoryPersonnel.filter(p => ['Staff', 'Admin', 'Manager'].includes(p.role)).length, icon: 'briefcase', color: '#3B82F6' },
+        { label: t('m_contacts_suppliers', 'Suppliers'), count: directoryPersonnel.filter(p => p.role === 'Supplier').length, icon: 'business', color: '#F59E0B' }
       ]} />
 
       <View style={styles.tabsContainer}>
@@ -138,7 +177,7 @@ export default function ContactsScreen() {
               onPress={() => setContactGroup(group)}
             >
               <Text style={[styles.tabBtnText, contactGroup === group && styles.tabBtnTextActive]}>
-                {group === 'All' ? 'All Contacts' : `${group}s`}
+                {t('m_contacts_tab_' + group.toLowerCase(), group === 'All' ? 'All Contacts' : group + 's')}
               </Text>
             </TouchableOpacity>
           ))}
@@ -150,7 +189,7 @@ export default function ContactsScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput 
             style={styles.searchInput} 
-            placeholder={`Search ${contactGroup === 'All' ? '' : contactGroup + ' '}directory...`}
+            placeholder={t('m_contacts_search_ph', 'Search directory...')}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -159,27 +198,42 @@ export default function ContactsScreen() {
           />
         </View>
         <View style={styles.filterGroup}>
+          {selectedIds.length > 0 && (
+            <TouchableOpacity style={[styles.filterBtn, { borderColor: '#EF4444' }]} onPress={handleDeleteSelected}>
+              <Ionicons name="trash-outline" size={18} color="#EF4444" />
+              <Text style={[styles.filterBtnText, { color: '#EF4444' }]}>{t('common_delete', 'Delete')} ({selectedIds.length})</Text>
+            </TouchableOpacity>
+          )}
+          {isMobile && (
+            <TouchableOpacity style={styles.filterBtn} onPress={handleSelectAll}>
+              <Ionicons name={selectedIds.length === filteredContacts.length && filteredContacts.length > 0 ? "checkbox" : "square-outline"} size={18} color={selectedIds.length === filteredContacts.length && filteredContacts.length > 0 ? "#043094" : "#4B5563"} />
+              <Text style={styles.filterBtnText}>{selectedIds.length === filteredContacts.length && filteredContacts.length > 0 ? 'Deselect All' : 'Select All'}</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={styles.filterBtn} onPress={() => setIsFilterModalVisible(true)}>
             <Ionicons name="filter-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Department {departmentFilter !== 'All' ? `(${departmentFilter})` : ''}</Text>
+            <Text style={styles.filterBtnText}>{t('m_contacts_dept', 'Department')} {departmentFilter !== 'All' ? `(${departmentFilter})` : ''}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterBtn} onPress={handleImport}>
             <Ionicons name="cloud-upload-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Import</Text>
+            <Text style={styles.filterBtnText}>{t('m_contacts_import', 'Import')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterBtn} onPress={handleExport}>
             <Ionicons name="download-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Export</Text>
+            <Text style={styles.filterBtnText}>{t('m_contacts_export', 'Export')}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.card}>
+      <View style={isMobile ? { paddingBottom: 20 } : styles.card}>
         {!isMobile && (
           <View style={styles.tableHeader}>
-            <Text style={[styles.th, { flex: 2 }]}>Name</Text>
-            <Text style={[styles.th, { flex: 1.5 }]}>Department</Text>
-            <Text style={[styles.th, { flex: 2 }]}>Contact Info</Text>
+            <TouchableOpacity style={{ width: 40, alignItems: 'center' }} onPress={handleSelectAll}>
+              <Ionicons name={selectedIds.length === filteredContacts.length && filteredContacts.length > 0 ? "checkbox" : "square-outline"} size={20} color={selectedIds.length === filteredContacts.length && filteredContacts.length > 0 ? "#043094" : "#9CA3AF"} />
+            </TouchableOpacity>
+            <Text style={[styles.th, { flex: 2 }]}>{t('m_contacts_name', 'Name')}</Text>
+            <Text style={[styles.th, { flex: 1.5 }]}>{t('m_contacts_dept_th', 'Department')}</Text>
+            <Text style={[styles.th, { flex: 2 }]}>{t('m_contacts_contact_th', 'Contact Info')}</Text>
             <View style={{ width: 40 }} />
           </View>
         )}
@@ -187,29 +241,60 @@ export default function ContactsScreen() {
         {filteredContacts.map((contact, index) => (
           <TouchableOpacity 
             key={contact.id} 
-            style={[styles.tableRow, isMobile && styles.tableRowMobile, index === filteredContacts.length - 1 && { borderBottomWidth: 0 }]}
+            style={[!isMobile && styles.tableRow, isMobile ? styles.tableRowMobile : (index === filteredContacts.length - 1 && { borderBottomWidth: 0 })]}
             onPress={() => router.push(`/(manager)/contacts/${contact.id}` as any)}
           >
             
+            {!isMobile && (
+              <TouchableOpacity style={{ width: 40, alignItems: 'center', justifyContent: 'center' }} onPress={() => toggleSelect(contact.id)}>
+                <Ionicons name={selectedIds.includes(contact.id) ? "checkbox" : "square-outline"} size={20} color={selectedIds.includes(contact.id) ? "#043094" : "#9CA3AF"} />
+              </TouchableOpacity>
+            )}
+
             <View style={[styles.td, { flex: isMobile ? undefined : 2 }, isMobile && { width: '100%', marginBottom: 15 }]}>
               <View style={styles.infoGroup}>
-                <Image source={{ uri: contact.avatar }} style={styles.avatar} />
-                <View style={{ paddingRight: 20 }}>
-                  <Text style={styles.itemName}>{contact.name}</Text>
-                  <Text style={styles.itemSku}>{contact.role}</Text>
+                {isMobile && (
+                  <TouchableOpacity style={{ marginRight: 15 }} onPress={() => toggleSelect(contact.id)}>
+                    <Ionicons name={selectedIds.includes(contact.id) ? "checkbox" : "square-outline"} size={22} color={selectedIds.includes(contact.id) ? "#043094" : "#9CA3AF"} />
+                  </TouchableOpacity>
+                )}
+                {contact.avatar ? (
+                  <Image source={{ uri: contact.avatar }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, { alignItems: 'center', justifyContent: 'center' }]}>
+                    <Ionicons name="person" size={24} color="#9CA3AF" />
+                  </View>
+                )}
+                <View style={{ flex: 1, minWidth: 0, paddingRight: isMobile ? 0 : 20 }}>
+                  <Text style={styles.itemName} numberOfLines={1} ellipsizeMode="tail">{contact.name}</Text>
+                  <Text style={styles.itemSku} numberOfLines={1}>{contact.role}</Text>
                 </View>
               </View>
             </View>
 
             <View style={[styles.td, { flex: isMobile ? undefined : 1.5 }, isMobile && styles.mobileDataRow]}>
-              {isMobile && <Text style={styles.mobileLabel}>Department</Text>}
-              <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{contact.department}</Text>
+              {isMobile && <Text style={styles.mobileLabel}>Department & Type</Text>}
+              <View style={{ flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+                {contact.department !== 'Unassigned' && (
+                  <View style={styles.categoryBadge}>
+                    <Text style={styles.categoryText}>{contact.department}</Text>
+                  </View>
+                )}
+                {(() => {
+                  const isInternal = contact.contact_type === 'Internal' || contact.role === 'Driver' || contact.role === 'Manager' || (contact as any).isProfile;
+                  return (
+                    <View style={[styles.categoryBadge, { backgroundColor: isInternal ? '#ECFDF5' : '#F3F4F6' }]}>
+                      <Text style={[styles.categoryText, { color: isInternal ? '#059669' : '#4B5563' }]}>
+                        {contact.contact_type || (isInternal ? 'Internal' : 'External')}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
             </View>
 
-            <View style={[styles.td, { flex: isMobile ? undefined : 2 }, isMobile && styles.mobileDataRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-              {isMobile && <Text style={[styles.mobileLabel, { marginBottom: 4 }]}>Contact Info</Text>}
+            <View style={[styles.td, { flex: isMobile ? undefined : 2 }, isMobile && styles.mobileDataRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start', borderBottomWidth: 0 }]}>
+              {isMobile && <Text style={[styles.mobileLabel, { marginBottom: 8 }]}>Contact Info</Text>}
               <View style={!isMobile && { paddingRight: 20 }}>
                 <View style={styles.contactRow}>
                   <Ionicons name="call-outline" size={14} color="#6B7280" />
@@ -245,13 +330,13 @@ export default function ContactsScreen() {
         <View style={styles.filterModalOverlay}>
           <View style={styles.filterModalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Contacts</Text>
+              <Text style={styles.modalTitle}>{t('m_contacts_filter_title', 'Filter Contacts')}</Text>
               <TouchableOpacity onPress={() => setIsFilterModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
             <View style={{ padding: 20 }}>
-              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>By Department:</Text>
+              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>{t('m_contacts_filter_by_dept', 'By Department:')}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
                 {['All', 'Operations', 'Maintenance', 'Admin', 'Safety'].map(dept => (
                   <TouchableOpacity 
@@ -271,7 +356,7 @@ export default function ContactsScreen() {
               </View>
               
               <TouchableOpacity style={styles.applyBtn} onPress={() => setIsFilterModalVisible(false)}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Apply Filters</Text>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('m_contacts_filter_apply', 'Apply Filters')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -298,15 +383,15 @@ const styles = StyleSheet.create({
   filterBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', paddingHorizontal: 12, height: 40, borderRadius: 8 },
   filterBtnText: { color: '#4B5563', fontWeight: '500', marginLeft: 6 },
   card: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden' },
-  tableHeader: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase' },
+  tableHeader: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 12, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', alignItems: 'center' },
+  th: { fontSize: 12, fontWeight: '600', color: '#6B7280', textTransform: 'uppercase', minWidth: 0 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  tableRowMobile: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 20 },
-  td: { justifyContent: 'center' },
-  mobileDataRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#F9FAFB' },
+  tableRowMobile: { flexDirection: 'column', alignItems: 'flex-start', padding: 20, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
+  td: { justifyContent: 'center', minWidth: 0 },
+  mobileDataRow: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   mobileLabel: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
-  infoGroup: { flexDirection: 'row', alignItems: 'center' },
-  avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 15, backgroundColor: '#E5E7EB' },
+  infoGroup: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 },
+  avatar: { width: 44, height: 44, borderRadius: 22, marginRight: 15, backgroundColor: '#E5E7EB', flexShrink: 0 },
   itemName: { fontSize: 15, fontWeight: '600', color: '#111827' },
   itemSku: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   categoryBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },

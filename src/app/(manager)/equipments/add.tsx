@@ -7,16 +7,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import { useEquipments } from '../../../context/EquipmentContext';
+import { useTranslation } from 'react-i18next';
 
 const SIDEBAR_ITEMS = [
   { id: 'details', label: 'Details', icon: 'document-text-outline' },
-  { id: 'maintenance', label: 'Maintenance', icon: 'build-outline' },
-  { id: 'lifecycle', label: 'Lifecycle', icon: 'sync-outline' },
-  { id: 'financial', label: 'Financial', icon: 'cash-outline' },
-  { id: 'warranties', label: 'Warranties', icon: 'shield-checkmark-outline' },
-  { id: 'custom', label: 'Custom Fields', icon: 'options-outline' },
-  { id: 'specs', label: 'Specifications', icon: 'list-outline' },
-  { id: 'settings', label: 'Settings', icon: 'settings-outline' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'build-outline' }
 ];
 
 const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = false, onDecode, isSelect = false, isDate = false, options = [], value, onValueChange, onChangeText }: any) => {
@@ -43,12 +38,52 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
           <Ionicons name="chevron-down" size={16} color="#9CA3AF" style={styles.selectIcon} />
         </TouchableOpacity>
       ) : isDate ? (
-        <TouchableOpacity style={styles.inputContainer} onPress={() => setDatePickerVisibility(true)}>
-          <Text style={[styles.input, { paddingTop: 10 }, !value && { color: '#9CA3AF' }]}>
-            {value || placeholder}
-          </Text>
-          <Ionicons name="calendar-outline" size={16} color="#9CA3AF" style={styles.selectIcon} />
-        </TouchableOpacity>
+        Platform.OS === 'web' ? (
+          <View style={styles.inputContainer}>
+            <input 
+              type="date"
+              value={(() => {
+                if (!value) return '';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+                const parts = value.split('/');
+                if (parts.length === 3) {
+                  return `${parts[2]}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`;
+                }
+                return value;
+              })()}
+              onChange={(e) => {
+                if (onChangeText) {
+                  const val = e.target.value;
+                  if (!val) {
+                    onChangeText('');
+                    return;
+                  }
+                  const [y, m, d] = val.split('-');
+                  onChangeText(`${parseInt(m, 10)}/${parseInt(d, 10)}/${y}`);
+                }
+              }}
+              onClick={(e) => (e.target as any).showPicker && (e.target as any).showPicker()}
+              style={{
+                flex: 1,
+                border: 'none',
+                backgroundColor: 'transparent',
+                outline: 'none',
+                padding: '10px 14px',
+                fontSize: 14,
+                fontFamily: 'inherit',
+                color: value ? '#111827' : '#9CA3AF',
+                cursor: 'pointer'
+              }}
+            />
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.inputContainer} onPress={() => setDatePickerVisibility(true)}>
+            <Text style={[styles.input, { paddingTop: 10 }, !value && { color: '#9CA3AF' }]}>
+              {value || placeholder}
+            </Text>
+            <Ionicons name="calendar-outline" size={16} color="#9CA3AF" style={styles.selectIcon} />
+          </TouchableOpacity>
+        )
       ) : (
         <View style={styles.inputContainer}>
           <TextInput 
@@ -95,7 +130,7 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
         </Modal>
       )}
 
-      {isDate && (
+      {isDate && Platform.OS !== 'web' && (
         <DateTimePickerModal
           isVisible={isDatePickerVisible}
           mode="date"
@@ -109,6 +144,7 @@ const FormField = ({ label, required = false, placeholder, hint, hasDecodeBtn = 
 
 export default function AddEquipmentScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { addEquipment } = useEquipments();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024; // Use mobile layout for small tablets (<1024px)
@@ -116,14 +152,10 @@ export default function AddEquipmentScreen() {
   const [warrantyModalVisible, setWarrantyModalVisible] = useState(false);
   const [profileImageModalVisible, setProfileImageModalVisible] = useState(false);
   const [form, setForm] = useState({
-    profileImage: '', name: '', telematics: '', serialNumber: '', plate: '', type: '', fuelType: '', 
-    year: '', make: '', model: '', trim: '', state: '', labels: '',
-    primaryMeter: '', currentMeter: '', maintenanceProgram: '',
-    inServiceDate: '', serviceLife: '', resaleValue: '',
-    purchasePrice: '', purchaseDate: '', financeCompany: '', monthlyPayment: '',
-    warrantyFile: '', powertrainExp: '', bumperExp: '',
-    licenseReq: '', specialEquip: '',
-    engineSize: '', transmission: '', driveType: '', gvwr: ''
+    profileImage: '', name: '', serialNumber: '', type: '', 
+    year: '', make: '', model: '', currentMeter: '', group: '',
+    inServiceDate: '', serviceLife: '', resaleValue: '', purchasePrice: '', purchaseDate: '',
+    financeCompany: '', monthlyPayment: ''
   });
 
   const handlePickProfileImage = async (useCamera: boolean) => {
@@ -209,21 +241,21 @@ export default function AddEquipmentScreen() {
         <View>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={18} color="#4B5563" />
-            <Text style={styles.backText}>Equipments</Text>
+            <Text style={styles.backText}>{t('equip_title', 'Equipments')}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>New Equipment</Text>
+          <Text style={styles.title}>{t('equip_add_title', 'New Equipment')}</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
+            <Text style={styles.cancelBtnText}>{t('common_cancel', 'Cancel')}</Text>
           </TouchableOpacity>
           {!isMobile && (
             <TouchableOpacity style={styles.addMultipleBtn}>
-              <Text style={styles.addMultipleBtnText}>Add Multiple</Text>
+              <Text style={styles.addMultipleBtnText}>{t('equip_add_multiple', 'Add Multiple')}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-            <Text style={styles.saveBtnText}>Save Equipment</Text>
+            <Text style={styles.saveBtnText}>{t('equip_save_btn', 'Save Equipment')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -279,7 +311,7 @@ export default function AddEquipmentScreen() {
         <ScrollView style={styles.formScroll} contentContainerStyle={[styles.formContainer, isMobile && { padding: 15 }]}>
           {activeSection === 'details' && (
             <View style={[styles.formSection, isMobile && { padding: 20 }]}>
-              <Text style={styles.sectionTitle}>Identification</Text>
+              <Text style={styles.sectionTitle}>{t('equip_ident', 'Identification')}</Text>
               
               <View style={{ alignItems: 'center', marginBottom: 24 }}>
                 <TouchableOpacity 
@@ -290,68 +322,51 @@ export default function AddEquipmentScreen() {
                     <>
                       <Image source={{ uri: form.profileImage }} style={{ width: '100%', height: '100%' }} />
                       <View style={{ position: 'absolute', bottom: 0, width: '100%', backgroundColor: 'rgba(0,0,0,0.5)', paddingVertical: 4, alignItems: 'center' }}>
-                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>EDIT</Text>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>{t('common_edit', 'EDIT')}</Text>
                       </View>
                     </>
                   ) : (
                     <>
                       <Ionicons name="camera-outline" size={32} color="#9CA3AF" />
-                      <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Add Photo</Text>
+                      <Text style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{t('equip_add_photo', 'Add Photo')}</Text>
                     </>
                   )}
                 </TouchableOpacity>
               </View>
 
               <FormField 
-                label="Equipment Name" 
+                label={t('equip_name', 'Equipment Name')}
                 required={true}
                 value={form.name}
                 onChangeText={(t: string) => setForm({...form, name: t})}
-                hint="Enter a nickname to distinguish this Equipment in the system."
+                hint={t('equip_name_hint', 'Enter a nickname to distinguish this Equipment in the system.')}
               />
               
               <FormField 
-                label="Telematics Device" 
-                isSelect={true}
-                options={['Geotab GO9', 'Samsara VG34', 'Verizon Connect', 'KeepTruckin ELD', 'None']}
-                value={form.telematics}
-                onValueChange={(val: string) => setForm({...form, telematics: val})}
-                placeholder="Select GPS Tracker (e.g. Geotab GO9)"
-                hint="Link this Equipment with a GPS device to begin automatically collecting location and engine data"
-              />
-              
-              <FormField 
-                label="VIN/SN" 
+                label={t('equip_vin_sn', 'Serial Number (SN)')}
                 value={form.serialNumber}
                 onChangeText={(t: string) => setForm({...form, serialNumber: t})}
-                hint="Equipment Identification Number. We can decode this to auto-fill the year, make, model and specs."
-              />
-              
-              <FormField 
-                label="License Plate" 
-                value={form.plate}
-                onChangeText={(t: string) => setForm({...form, plate: t})}
+                hint="Equipment Serial Number for tracking and warranties."
               />
               
               <View style={[styles.row, isMobile && { flexDirection: 'column' }]}>
                 <View style={styles.halfCol}>
                   <FormField 
-                    label="Type" 
+                    label="Type / Category" 
                     required={true} 
-                    placeholder="Car" 
+                    isSelect={true}
+                    placeholder="Select Type" 
+                    options={['Generator', 'Forklift', 'Trailer', 'Heavy Machinery', 'Tool', 'Other']}
                     value={form.type}
-                    onChangeText={(t: string) => setForm({...form, type: t})}
+                    onValueChange={(t: string) => setForm({...form, type: t})}
                   />
                 </View>
                 <View style={styles.halfCol}>
                   <FormField 
-                    label="Fuel Type" 
-                    isSelect={true} 
-                    options={['Gasoline', 'Diesel', 'Electric', 'Hybrid', 'Propane']}
-                    value={form.fuelType}
-                    onValueChange={(val: string) => setForm({...form, fuelType: val})}
-                    placeholder="Gasoline" 
-                    hint="Gasoline, Diesel, Electric, Hybrid, etc." 
+                    label="Group / Location" 
+                    value={form.group}
+                    onChangeText={(t: string) => setForm({...form, group: t})}
+                    placeholder="e.g. Warehouse A" 
                   />
                 </View>
               </View>
@@ -368,56 +383,22 @@ export default function AddEquipmentScreen() {
                 </View>
                 <View style={styles.thirdCol}>
                   <FormField 
-                    label="Make" 
-                    isSelect={true} 
-                    options={['Toyota', 'Ford', 'Chevrolet', 'GMC', 'Freightliner', 'Volvo', 'Kenworth']}
+                    label="Manufacturer" 
                     value={form.make}
-                    onValueChange={(val: string) => setForm({...form, make: val})}
-                    placeholder="e.g. Toyota, Freightliner" 
-                    hint="The manufacturer of the Equipment." 
+                    onChangeText={(t: string) => setForm({...form, make: t})}
+                    placeholder="e.g. Caterpillar, Bobcat" 
                   />
                 </View>
                 <View style={styles.thirdCol}>
                   <FormField 
                     label="Model" 
-                    isSelect={true} 
-                    options={['Corolla', 'Camry', 'F-150', 'Silverado', 'Cascadia', 'VNL', 'T680']}
                     value={form.model}
-                    onValueChange={(val: string) => setForm({...form, model: val})}
-                    placeholder="e.g. Corolla, Cascadia" 
-                    hint="The specific model." 
-                  />
-                </View>
-              </View>
-              
-              <View style={[styles.row, isMobile && { flexDirection: 'column' }]}>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="Trim" 
-                    value={form.trim}
-                    onChangeText={(t: string) => setForm({...form, trim: t})}
-                    placeholder="e.g. SE, LE, Lariat" 
-                    hint="The specific version or package of the model."
-                  />
-                </View>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="Registration State/Province" 
-                    value={form.state}
-                    onChangeText={(t: string) => setForm({...form, state: t})}
+                    onChangeText={(t: string) => setForm({...form, model: t})}
+                    placeholder="e.g. D6T, S650" 
                   />
                 </View>
               </View>
 
-              <FormField 
-                label="Labels" 
-                isSelect={true}
-                options={['Heavy Duty', 'Light Duty', 'Leased', 'Owned', 'Refrigerated']}
-                value={form.labels}
-                onValueChange={(val: string) => setForm({...form, labels: val})}
-                placeholder="e.g. Heavy Duty, Leased"
-                hint="Tags to help you group or filter Equipments quickly."
-              />
             </View>
           )}
 
@@ -425,26 +406,10 @@ export default function AddEquipmentScreen() {
             <View style={[styles.formSection, isMobile && { padding: 20 }]}>
               <Text style={styles.sectionTitle}>Maintenance Settings</Text>
               <FormField 
-                label="Primary Meter" 
-                isSelect={true} 
-                options={['Miles', 'Kilometers', 'Hours']}
-                value={form.primaryMeter}
-                onValueChange={(val: string) => setForm({...form, primaryMeter: val})}
-                placeholder="Miles" 
-              />
-              <FormField 
-                label="Current Meter Reading" 
+                label="Current Meter Reading (Hours)" 
                 value={form.currentMeter}
                 onChangeText={(t: string) => setForm({...form, currentMeter: t})}
-                placeholder="e.g. 50,000" 
-              />
-              <FormField 
-                label="Preventative Maintenance Program" 
-                isSelect={true} 
-                options={['Standard Fleet Schedule', 'Heavy Duty Schedule', 'Custom Schedule']}
-                value={form.maintenanceProgram}
-                onValueChange={(val: string) => setForm({...form, maintenanceProgram: val})}
-                placeholder="Standard Fleet Schedule" 
+                placeholder="e.g. 5,000" 
               />
             </View>
           )}
@@ -517,131 +482,6 @@ export default function AddEquipmentScreen() {
             </View>
           )}
 
-          {activeSection === 'warranties' && (
-            <View style={[styles.formSection, isMobile && { padding: 20 }]}>
-              <Text style={styles.sectionTitle}>Warranties</Text>
-              <Text style={{color: '#6B7280', marginBottom: 20}}>Upload photos or documents of the Equipment's warranty agreements so drivers and managers can access them in the field.</Text>
-              <TouchableOpacity style={styles.uploadBtn} onPress={() => setWarrantyModalVisible(true)}>
-                <Ionicons name="document-attach-outline" size={24} color="#043094" style={{marginRight: 10}} />
-                <Text style={styles.uploadBtnText}>Upload, Scan, or Take Photo of Warranty</Text>
-              </TouchableOpacity>
-              {form.warrantyFile ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15, padding: 10, backgroundColor: '#ECFDF5', borderRadius: 6, borderWidth: 1, borderColor: '#D1FAE5' }}>
-                  <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-                  <Text style={{ marginLeft: 8, color: '#065F46', fontWeight: '500' }}>{form.warrantyFile}</Text>
-                </View>
-              ) : null}
-              <View style={{marginTop: 30}}>
-                <FormField 
-                  label="Powertrain Warranty Expiration" 
-                  isDate={true}
-                  value={form.powertrainExp}
-                  onChangeText={(t: string) => setForm({...form, powertrainExp: t})}
-                  placeholder="Miles or Date" 
-                />
-                <FormField 
-                  label="Bumper to Bumper Expiration" 
-                  isDate={true}
-                  value={form.bumperExp}
-                  onChangeText={(t: string) => setForm({...form, bumperExp: t})}
-                  placeholder="Miles or Date" 
-                />
-              </View>
-            </View>
-          )}
-
-          {activeSection === 'custom' && (
-            <View style={[styles.formSection, isMobile && { padding: 20 }]}>
-              <Text style={styles.sectionTitle}>Custom Fields</Text>
-              <FormField 
-                label="Driver's License Requirement" 
-                isSelect={true} 
-                options={['Standard', 'CDL Class A', 'CDL Class B', 'CDL Class C', 'Motorcycle']}
-                value={form.licenseReq}
-                onValueChange={(val: string) => setForm({...form, licenseReq: val})}
-                placeholder="e.g. CDL Required" 
-              />
-              <FormField 
-                label="Special Equipment Installed" 
-                value={form.specialEquip}
-                onChangeText={(t: string) => setForm({...form, specialEquip: t})}
-                placeholder="e.g. Lift Gate, Dashcam" 
-              />
-            </View>
-          )}
-
-          {activeSection === 'specs' && (
-            <View style={[styles.formSection, isMobile && { padding: 20 }]}>
-              <Text style={styles.sectionTitle}>Specifications</Text>
-              <View style={[styles.row, isMobile && { flexDirection: 'column' }]}>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="Engine Size" 
-                    value={form.engineSize}
-                    onChangeText={(t: string) => setForm({...form, engineSize: t})}
-                    placeholder="e.g. 12.8L V8" 
-                  />
-                </View>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="Transmission" 
-                    value={form.transmission}
-                    onChangeText={(t: string) => setForm({...form, transmission: t})}
-                    placeholder="e.g. 10-Speed Automatic" 
-                  />
-                </View>
-              </View>
-              <View style={[styles.row, isMobile && { flexDirection: 'column' }]}>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="Drive Type" 
-                    value={form.driveType}
-                    onChangeText={(t: string) => setForm({...form, driveType: t})}
-                    placeholder="e.g. 4x4, 6x4" 
-                  />
-                </View>
-                <View style={styles.halfCol}>
-                  <FormField 
-                    label="GVWR (lbs)" 
-                    value={form.gvwr}
-                    onChangeText={(t: string) => setForm({...form, gvwr: t})}
-                    placeholder="e.g. 52,000" 
-                  />
-                </View>
-              </View>
-            </View>
-          )}
-
-          {activeSection === 'settings' && (
-            <View style={[styles.formSection, isMobile && { padding: 20 }]}>
-              <Text style={styles.sectionTitle}>Settings</Text>
-              <Text style={{color: '#6B7280', marginBottom: 20}}>Configure alerts and behavior for this specific Equipment.</Text>
-              
-              <View style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-                <View style={{ flex: 1, marginBottom: isMobile ? 15 : 0 }}>
-                  <Text style={styles.settingTitle}>Active GPS Tracking</Text>
-                  <Text style={[styles.settingDesc, isMobile && { paddingRight: 0 }]}>Allow this Equipment's location to be viewed on the map.</Text>
-                </View>
-                <Ionicons name="toggle" size={32} color="#10B981" style={isMobile && { alignSelf: 'flex-end' }} />
-              </View>
-
-              <View style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-                <View style={{ flex: 1, marginBottom: isMobile ? 15 : 0 }}>
-                  <Text style={styles.settingTitle}>Maintenance Reminders</Text>
-                  <Text style={[styles.settingDesc, isMobile && { paddingRight: 0 }]}>Send push notifications to the assigned driver when service is due.</Text>
-                </View>
-                <Ionicons name="toggle" size={32} color="#10B981" style={isMobile && { alignSelf: 'flex-end' }} />
-              </View>
-
-              <View style={[styles.settingRow, isMobile && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-                <View style={{ flex: 1, marginBottom: isMobile ? 15 : 0 }}>
-                  <Text style={styles.settingTitle}>Speed Limit Threshold (mph)</Text>
-                  <Text style={[styles.settingDesc, isMobile && { paddingRight: 0 }]}>Alert managers if this Equipment exceeds this speed.</Text>
-                </View>
-                <TextInput style={[styles.smallInput, isMobile && { alignSelf: 'flex-end', width: 100 }]} placeholder="70" keyboardType="numeric" />
-              </View>
-            </View>
-          )}
         </ScrollView>
       </View>
 

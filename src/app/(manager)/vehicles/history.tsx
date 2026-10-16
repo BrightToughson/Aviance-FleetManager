@@ -8,15 +8,8 @@ export default function HistoryScreen() {
   const router = useRouter();
   const isStatus = type === 'status';
 
-  // Mock data
-  const historyData = isStatus ? [
-    { id: 1, date: 'Oct 25, 2026 - 14:30', title: 'Status Changed to In Shop', notes: 'Scheduled maintenance for brakes.', author: 'John Doe' },
-    { id: 2, date: 'Oct 20, 2026 - 09:15', title: 'Status Changed to Active', notes: 'Vehicle received and inspected.', author: 'Jane Smith' },
-    { id: 3, date: 'Sep 10, 2026 - 11:00', title: 'Status Changed to Out of Service', notes: 'Reported engine issues by driver.', author: 'Mike Ross' },
-  ] : [
-    { id: 1, date: 'Oct 25, 2026 - 14:30', title: 'Assigned to Texas Yard', notes: 'Transferred for new project.', author: 'John Doe' },
-    { id: 2, date: 'Oct 20, 2026 - 09:15', title: 'Assigned to Alabama Yard', notes: 'Initial assignment upon purchase.', author: 'Jane Smith' },
-  ];
+  // Cleared mock data
+  const historyData: any[] = [];
 
   return (
     <View style={styles.container}>
@@ -26,7 +19,7 @@ export default function HistoryScreen() {
         </TouchableOpacity>
         <View>
           <Text style={styles.title}>{isStatus ? 'Status History' : 'Group Assignment History'}</Text>
-          <Text style={styles.subtitle}>ID: {id || 'N/A'}</Text>
+          <Text style={styles.subtitle}>{isStatus ? 'Vehicle Status Audit Log' : 'Vehicle Assignment Audit Log'}</Text>
         </View>
       </View>
       

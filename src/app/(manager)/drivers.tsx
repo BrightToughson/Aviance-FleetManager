@@ -1,13 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Image, useWindowDimensions, Alert, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Clipboard from 'expo-clipboard';
+import { useUser } from '@clerk/expo';
+import { supabase } from '../../lib/supabase';
 import SummaryBox from '../../components/SummaryBox';
 import { useVehicles } from '../../context/VehicleContext';
 import { usePersonnel } from '../../context/PersonnelContext';
+import { useSearch } from '../../context/SearchContext';
+import { useTranslation } from 'react-i18next';
 
 export default function DriversScreen() {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const router = useRouter();
   const isMobile = width < 1024;
@@ -15,19 +21,80 @@ export default function DriversScreen() {
   const { vehicles, updateVehicleData } = useVehicles();
   const { personnel, addPerson, updatePerson } = usePersonnel();
 
-  const drivers = useMemo(() => personnel.filter(p => p.role === 'Driver'), [personnel]);
-  const nonDrivers = useMemo(() => personnel.filter(p => p.role !== 'Driver'), [personnel]);
+  const drivers = useMemo(() => personnel.filter(p => p.role === 'Driver' && p.isProfile), [personnel]);
+  const nonDrivers = useMemo(() => personnel.filter(p => !p.isProfile), [personnel]);
   
-  const [searchQuery, setSearchQuery] = useState('');
+  const { searchQuery, setSearchQuery } = useSearch();
   const [listFilter, setListFilter] = useState<'All' | 'Assigned' | 'Unassigned'>('All');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'On Leave' | 'Inactive'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Active' | 'On Leave' | 'Inactive' | 'Pending'>('All');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
+  const [isApproveMode, setIsApproveMode] = useState(false);
   const [isVehicleSelectVisible, setIsVehicleSelectVisible] = useState(false);
   const [isContactSelectVisible, setIsContactSelectVisible] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
+
+  const { user } = useUser();
+  const [fleetCode, setFleetCode] = useState<string>('');
+  const [copied, setCopied] = useState(false);
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
+  const [copiedMessage, setCopiedMessage] = useState(false);
+
+  useEffect(() => {
+    async function loadFleetCode() {
+      if (!user?.id) return;
+      if (user?.unsafeMetadata?.fleetCode && typeof user.unsafeMetadata.fleetCode === 'string') {
+        setFleetCode(user.unsafeMetadata.fleetCode);
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('fleet_code')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (data?.fleet_code) {
+          setFleetCode(data.fleet_code);
+        }
+      } catch (e) {
+        console.error('Error fetching manager fleet_code:', e);
+      }
+    }
+    loadFleetCode();
+  }, [user?.id, user?.unsafeMetadata?.fleetCode]);
+
+  const handleCopyCode = async () => {
+    if (!fleetCode) return;
+    try {
+      if (Platform.OS === 'web' && (navigator as any)?.clipboard?.writeText) {
+        await (navigator as any).clipboard.writeText(fleetCode);
+      } else {
+        await Clipboard.setStringAsync(fleetCode);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch (e) {
+      console.error('Failed to copy fleet code:', e);
+    }
+  };
+
+  const handleCopyInviteMessage = async () => {
+    if (!fleetCode) return;
+    const msg = `Join our fleet on Aviance! Download the Aviance Driver App, register your account, and enter our Fleet Join Code: ${fleetCode} to connect with our fleet manager.`;
+    try {
+      if (Platform.OS === 'web' && (navigator as any)?.clipboard?.writeText) {
+        await (navigator as any).clipboard.writeText(msg);
+      } else {
+        await Clipboard.setStringAsync(msg);
+      }
+      setCopiedMessage(true);
+      setTimeout(() => setCopiedMessage(false), 2500);
+    } catch (e) {
+      console.error('Failed to copy invite message:', e);
+    }
+  };
 
   // Form State
   const [form, setForm] = useState({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
@@ -103,16 +170,20 @@ export default function DriversScreen() {
         score: form.score ? parseInt(form.score) : 100,
         licenseExp: form.license || '2030-01-01',
         vehicle: form.vehicle || 'Unassigned',
-        avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150&q=80'
+        avatar: ''
       });
     }
 
     if (form.vehicleId) {
-      updateVehicleData(form.vehicleId, { assignedTo: form.name });
+      updateVehicleData(form.vehicleId, { 
+        assignedTo: form.name,
+        current_driver_id: editingDriverId // This is the UUID/TEXT id for the profile
+      });
     }
 
     setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
     setEditingDriverId(null);
+    setIsApproveMode(false);
     setIsModalVisible(false);
   };
 
@@ -162,6 +233,12 @@ export default function DriversScreen() {
     setIsModalVisible(true);
   };
 
+  const handleApprove = (driverId: string) => {
+    handleAction(driverId);
+    setForm(prev => ({ ...prev, status: 'Active' }));
+    setIsApproveMode(true);
+  };
+
   const handleExport = () => {
     const csvData = "ID,Name,Status,Vehicle,License Exp,Score\n" + 
       filteredDrivers.map(d => `${d.id},${d.name},${d.status},${d.vehicle},${d.licenseExp},${d.score}`).join('\n');
@@ -194,7 +271,7 @@ export default function DriversScreen() {
         vehicle: 'Unassigned', 
         licenseExp: '2026-01-01', 
         score: 100, 
-        avatar: 'https://i.pravatar.cc/150?u=' + Math.random() 
+        avatar: '' 
       });
       
       if (Platform.OS === 'web') {
@@ -217,21 +294,71 @@ export default function DriversScreen() {
       {/* Header Area */}
       <View style={[styles.headerRow, isMobile && styles.headerRowMobile]}>
         <View>
-          <Text style={styles.pageTitle}>Drivers</Text>
-          <Text style={styles.pageSubtitle}>Manage your fleet personnel and compliance</Text>
+          <Text style={styles.pageTitle}>{t('nav_drivers', 'Drivers')}</Text>
+          <Text style={styles.pageSubtitle}>{t('driver_subtitle', 'Manage your fleet personnel and compliance')}</Text>
         </View>
-        <TouchableOpacity style={styles.primaryBtn} onPress={() => setIsModalVisible(true)}>
-          <Ionicons name="person-add" size={20} color="#fff" />
-          <Text style={styles.primaryBtnText}>Add Driver</Text>
+        <TouchableOpacity 
+          style={styles.primaryBtn} 
+          onPress={() => setIsInviteModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="paper-plane" size={18} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.primaryBtnText}>Invite Driver</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Driver Self-Registration Banner */}
+      <View style={[styles.inviteBanner, isMobile && styles.inviteBannerMobile]}>
+        <View style={styles.inviteBannerLeft}>
+          <View style={styles.inviteIconCircle}>
+            <Ionicons name="key" size={22} color="#043094" />
+          </View>
+          <View style={styles.inviteTextContainer}>
+            <View style={styles.inviteTitleRow}>
+              <Text style={styles.inviteBannerTitle}>Driver Self-Registration Code</Text>
+              <View style={styles.inviteActiveBadge}>
+                <View style={styles.activeDot} />
+                <Text style={styles.inviteActiveText}>ACTIVE</Text>
+              </View>
+            </View>
+            <Text style={styles.inviteBannerDesc}>
+              Drivers can download the Driver App, create an account, and enter this code to join your fleet automatically.
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.inviteBannerRight, isMobile && styles.inviteBannerRightMobile]}>
+          <View style={styles.codeDisplayContainer}>
+            <Text style={styles.codeDisplayLabel}>FLEET CODE</Text>
+            <Text style={styles.codeDisplayText}>{fleetCode || 'Generating...'}</Text>
+          </View>
+          
+          <TouchableOpacity 
+            style={[styles.copyCodeBtn, copied && styles.copyCodeBtnSuccess]} 
+            onPress={handleCopyCode}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={copied ? "checkmark-circle" : "copy-outline"} size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.copyCodeBtnText}>{copied ? "Copied!" : "Copy Code"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.howItWorksBtn} 
+            onPress={() => setIsInviteModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="information-circle-outline" size={16} color="#043094" style={{ marginRight: 5 }} />
+            <Text style={styles.howItWorksBtnText}>How it Works</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Stats Cards */}
       <SummaryBox items={[
-        { label: 'Total', count: drivers.length, icon: 'people', color: '#ffffff' },
-        { label: 'Active', count: drivers.filter(d => d.status === 'Active').length, icon: 'checkmark-circle', color: '#34D399' },
-        { label: 'On Leave', count: drivers.filter(d => d.status === 'On Leave').length, icon: 'time', color: '#F59E0B' },
-        { label: 'Inactive', count: drivers.filter(d => d.status === 'Inactive').length, icon: 'close-circle', color: '#F87171' }
+        { label: t('driver_stat_total', 'Total'), count: drivers.length, icon: 'people', color: '#ffffff' },
+        { label: t('driver_stat_active', 'Active'), count: drivers.filter(d => d.status === 'Active').length, icon: 'checkmark-circle', color: '#34D399' },
+        { label: t('driver_stat_pending', 'Pending'), count: drivers.filter(d => d.status === 'Pending').length, icon: 'hourglass', color: '#6366F1' },
+        { label: t('driver_stat_inactive', 'Inactive'), count: drivers.filter(d => d.status === 'Inactive' || d.status === 'On Leave').length, icon: 'close-circle', color: '#F87171' }
       ]} />
 
       {/* Driver List Filters */}
@@ -241,19 +368,19 @@ export default function DriversScreen() {
             style={[styles.vehicleTab, listFilter === 'All' && styles.activeVehicleTab]}
             onPress={() => setListFilter('All')}
           >
-            <Text style={[styles.vehicleTabText, listFilter === 'All' && styles.activeVehicleTabText]}>All</Text>
+            <Text style={[styles.vehicleTabText, listFilter === 'All' && styles.activeVehicleTabText]}>{t('veh_tab_all', 'All')}</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.vehicleTab, listFilter === 'Assigned' && styles.activeVehicleTab]}
             onPress={() => setListFilter('Assigned')}
           >
-            <Text style={[styles.vehicleTabText, listFilter === 'Assigned' && styles.activeVehicleTabText]}>Assigned</Text>
+            <Text style={[styles.vehicleTabText, listFilter === 'Assigned' && styles.activeVehicleTabText]}>{t('veh_tab_assigned', 'Assigned')}</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.vehicleTab, listFilter === 'Unassigned' && styles.activeVehicleTab]}
             onPress={() => setListFilter('Unassigned')}
           >
-            <Text style={[styles.vehicleTabText, listFilter === 'Unassigned' && styles.activeVehicleTabText]}>Unassigned</Text>
+            <Text style={[styles.vehicleTabText, listFilter === 'Unassigned' && styles.activeVehicleTabText]}>{t('veh_tab_unassigned', 'Unassigned')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -264,7 +391,7 @@ export default function DriversScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput 
             style={styles.searchInput} 
-            placeholder="Search drivers by name, license, or vehicle..." 
+            placeholder={t('driver_search', 'Search drivers by name, license, or vehicle...')} 
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -275,15 +402,15 @@ export default function DriversScreen() {
         <View style={styles.filterGroup}>
           <TouchableOpacity style={styles.filterBtn} onPress={() => setIsFilterModalVisible(true)}>
             <Ionicons name="filter-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Filters {statusFilter !== 'All' ? `(${statusFilter})` : ''}</Text>
+            <Text style={styles.filterBtnText}>{t('veh_filters', 'Filters')} {statusFilter !== 'All' ? `(${t(`driver_stat_${statusFilter.toLowerCase().replace(' ', '_')}`, statusFilter)})` : ''}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterBtn} onPress={handleImport}>
             <Ionicons name="cloud-upload-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Import</Text>
+            <Text style={styles.filterBtnText}>{t('driver_import', 'Import')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.filterBtn} onPress={handleExport}>
             <Ionicons name="download-outline" size={18} color="#4B5563" />
-            <Text style={styles.filterBtnText}>Export</Text>
+            <Text style={styles.filterBtnText}>{t('driver_export', 'Export')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -292,12 +419,12 @@ export default function DriversScreen() {
       <View style={styles.card}>
         {!isMobile && (
           <View style={styles.tableHeader}>
-            <Text style={[styles.th, { flex: 2 }]}>Driver</Text>
-            <Text style={[styles.th, { flex: 1 }]}>Status</Text>
-            <Text style={[styles.th, { flex: 2 }]}>Assigned Vehicle</Text>
-            <Text style={[styles.th, { flex: 1 }]}>License Exp.</Text>
-            <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>Safety Score</Text>
-            <View style={{ width: 40 }} />
+            <Text style={[styles.th, { flex: 2 }]}>{t('driver_col_driver', 'Driver')}</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('veh_col_status', 'Status')}</Text>
+            <Text style={[styles.th, { flex: 2 }]}>{t('driver_col_assigned_vehicle', 'Assigned Vehicle')}</Text>
+            <Text style={[styles.th, { flex: 1 }]}>{t('driver_col_license', 'License Exp.')}</Text>
+            <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>{t('driver_col_score', 'Safety Score')}</Text>
+            <View style={{ width: 100 }} />
           </View>
         )}
 
@@ -311,10 +438,16 @@ export default function DriversScreen() {
             {/* Driver Info */}
             <View style={[styles.td, { flex: isMobile ? undefined : 2 }, isMobile && { width: '100%', marginBottom: 15 }]}>
               <View style={styles.driverInfo}>
-                <Image source={{ uri: driver.avatar }} style={styles.avatar} />
-                <View>
-                  <Text style={styles.driverName}>{driver.name}</Text>
-                  <Text style={styles.driverId}>{driver.id}</Text>
+                {driver.avatar ? (
+                  <Image source={{ uri: driver.avatar }} style={styles.avatar} />
+                ) : (
+                  <View style={[styles.avatar, { alignItems: 'center', justifyContent: 'center' }]}>
+                    <Ionicons name="person" size={24} color="#9CA3AF" />
+                  </View>
+                )}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.driverName} numberOfLines={1}>{driver.name}</Text>
+                  {driver.phone ? <Text style={styles.driverId} numberOfLines={1}>{driver.phone}</Text> : null}
                 </View>
               </View>
             </View>
@@ -325,12 +458,14 @@ export default function DriversScreen() {
               <View style={[
                 styles.statusBadge, 
                 driver.status === 'Active' ? styles.statusActive : 
+                driver.status === 'Pending' ? { backgroundColor: '#EEF2FF', borderColor: '#C7D2FE' } :
                 driver.status === 'On Leave' ? styles.statusWarning : 
                 styles.statusInactive
               ]}>
                 <Text style={[
                   styles.statusText,
                   driver.status === 'Active' ? styles.statusActiveText : 
+                  driver.status === 'Pending' ? { color: '#4F46E5' } :
                   driver.status === 'On Leave' ? styles.statusWarningText : 
                   styles.statusInactiveText
                 ]}>{driver.status}</Text>
@@ -359,9 +494,19 @@ export default function DriversScreen() {
 
             {/* Actions */}
             {!isMobile && (
-              <TouchableOpacity style={{ width: 40, alignItems: 'center' }} onPress={() => handleAction(driver.id)}>
-                <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
-              </TouchableOpacity>
+              <View style={{ width: 100, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                {driver.status === 'Pending' && (
+                  <TouchableOpacity 
+                    style={{ backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }} 
+                    onPress={() => handleApprove(driver.id)}
+                  >
+                    <Text style={{ color: '#fff', fontSize: 13, fontWeight: '600' }}>Approve</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={{ width: 40, alignItems: 'center' }} onPress={() => handleAction(driver.id)}>
+                  <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
             )}
             
           </TouchableOpacity>
@@ -376,7 +521,7 @@ export default function DriversScreen() {
               // Vehicle Selection View
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Select Vehicle</Text>
+                  <Text style={styles.modalTitle}>{t('driver_select_vehicle', 'Select Vehicle')}</Text>
                   <TouchableOpacity onPress={() => setIsVehicleSelectVisible(false)}>
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </TouchableOpacity>
@@ -393,7 +538,7 @@ export default function DriversScreen() {
                       style={[styles.vehicleTab, vehicleFilter === 'All' && styles.activeVehicleTab]}
                       onPress={() => setVehicleFilter('All')}
                     >
-                      <Text style={[styles.vehicleTabText, vehicleFilter === 'All' && styles.activeVehicleTabText]}>All Vehicles</Text>
+                      <Text style={[styles.vehicleTabText, vehicleFilter === 'All' && styles.activeVehicleTabText]}>{t('driver_tab_all_vehicles', 'All Vehicles')}</Text>
                     </TouchableOpacity>
                   </View>
                   
@@ -401,7 +546,7 @@ export default function DriversScreen() {
                     <Ionicons name="search" size={20} color="#9CA3AF" />
                     <TextInput 
                       style={styles.searchInput} 
-                      placeholder="Search vehicles..." 
+                      placeholder={t('driver_search_vehicles', 'Search vehicles...')} 
                       value={vehicleSearch}
                       onChangeText={setVehicleSearch}
                     />
@@ -409,7 +554,7 @@ export default function DriversScreen() {
 
                   <ScrollView style={{ flex: 1 }}>
                     {availableVehicles.length === 0 ? (
-                      <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>No vehicles found.</Text>
+                      <Text style={{ textAlign: 'center', color: '#6B7280', marginTop: 20 }}>{t('driver_no_vehicles', 'No vehicles found.')}</Text>
                     ) : (
                       availableVehicles.map((v: any) => (
                         <TouchableOpacity 
@@ -436,7 +581,7 @@ export default function DriversScreen() {
               // Contact Selection Sub-Modal
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Import from Contacts</Text>
+                  <Text style={styles.modalTitle}>{t('driver_import_contacts', 'Import from Contacts')}</Text>
                   <TouchableOpacity onPress={() => setIsContactSelectVisible(false)}>
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </TouchableOpacity>
@@ -446,7 +591,7 @@ export default function DriversScreen() {
                     <Ionicons name="search" size={20} color="#9CA3AF" />
                     <TextInput 
                       style={styles.searchInput} 
-                      placeholder="Search drivers by name, email, or phone..." 
+                      placeholder={t('driver_search_contacts', 'Search drivers by name, email, or phone...')} 
                       value={contactSearchQuery}
                       onChangeText={setContactSearchQuery}
                     />
@@ -498,10 +643,13 @@ export default function DriversScreen() {
               // Normal Add Driver Form
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{editingDriverId ? 'Edit Driver' : 'Add New Driver'}</Text>
+                  <Text style={styles.modalTitle}>
+                    {isApproveMode ? t('driver_approve_title', 'Approve Driver') : editingDriverId ? t('driver_edit_title', 'Edit Driver') : t('driver_add_title', 'Add New Driver')}
+                  </Text>
                   <TouchableOpacity onPress={() => {
                     setIsModalVisible(false);
                     setEditingDriverId(null);
+                    setIsApproveMode(false);
                     setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
                   }}>
                     <Ionicons name="close" size={24} color="#6B7280" />
@@ -511,36 +659,36 @@ export default function DriversScreen() {
                   <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 15 }}>
                     <TouchableOpacity style={styles.importContactBtn} onPress={() => setIsContactSelectVisible(true)}>
                       <Ionicons name="people-outline" size={16} color="#043094" />
-                      <Text style={styles.importContactBtnText}>Import from Contacts</Text>
+                      <Text style={styles.importContactBtnText}>{t('driver_import_contacts', 'Import from Contacts')}</Text>
                     </TouchableOpacity>
                   </View>
                   
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Full Name *</Text>
+                    <Text style={styles.label}>{t('driver_lbl_name', 'Full Name *')}</Text>
                     <TextInput style={styles.input} value={form.name} onChangeText={(t) => setForm({...form, name: t})} placeholder="e.g. Jane Doe" />
                   </View>
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Email Address</Text>
+                    <Text style={styles.label}>{t('driver_lbl_email', 'Email Address')}</Text>
                     <TextInput style={styles.input} value={form.email} onChangeText={(t) => setForm({...form, email: t})} placeholder="e.g. janedoe@company.com" keyboardType="email-address" />
                   </View>
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Phone Number</Text>
+                    <Text style={styles.label}>{t('driver_lbl_phone', 'Phone Number')}</Text>
                     <TextInput style={styles.input} value={form.phone} onChangeText={(t) => setForm({...form, phone: t})} placeholder="e.g. (555) 123-4567" keyboardType="phone-pad" />
                   </View>
                   
                   <View style={[styles.formGroup, { marginTop: 10, paddingTop: 15, borderTopWidth: 1, borderTopColor: '#E5E7EB' }]}>
-                    <Text style={styles.label}>License Number</Text>
+                    <Text style={styles.label}>{t('driver_lbl_license', 'License Number')}</Text>
                     <TextInput style={styles.input} value={form.license} onChangeText={(t) => setForm({...form, license: t})} placeholder="e.g. CDL-12345" />
                   </View>
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Assigned Vehicle</Text>
+                    <Text style={styles.label}>{t('driver_lbl_vehicle', 'Assigned Vehicle')}</Text>
                     <TouchableOpacity style={styles.vehicleSelectBtn} onPress={() => setIsVehicleSelectVisible(true)}>
-                      <Text style={[styles.vehicleSelectBtnText, !form.vehicle && { color: '#9CA3AF' }]}>{form.vehicle || 'Select a Vehicle'}</Text>
+                      <Text style={[styles.vehicleSelectBtnText, !form.vehicle && { color: '#9CA3AF' }]}>{form.vehicle || t('driver_placeholder_vehicle', 'Select a Vehicle')}</Text>
                       <Ionicons name="car-outline" size={20} color="#6B7280" />
                     </TouchableOpacity>
                   </View>
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>Initial Safety Score</Text>
+                    <Text style={styles.label}>{t('driver_lbl_score', 'Initial Safety Score')}</Text>
                     <TextInput style={styles.input} value={form.score} onChangeText={(t) => setForm({...form, score: t})} keyboardType="numeric" placeholder="100" />
                   </View>
                 </ScrollView>
@@ -548,12 +696,15 @@ export default function DriversScreen() {
                   <TouchableOpacity style={styles.cancelModalBtn} onPress={() => {
                     setIsModalVisible(false);
                     setEditingDriverId(null);
+                    setIsApproveMode(false);
                     setForm({ name: '', license: '', vehicle: '', vehicleId: '', oldDriver: '', status: 'Active', score: '100', email: '', phone: '' });
                   }}>
                     <Text style={styles.cancelModalBtnText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.saveModalBtn} onPress={handleAddDriver}>
-                    <Text style={styles.saveModalBtnText}>{editingDriverId ? 'Save Changes' : 'Save Driver'}</Text>
+                    <Text style={styles.saveModalBtnText}>
+                      {isApproveMode ? t('driver_approve_btn', 'Approve & Save') : editingDriverId ? t('driver_save_changes', 'Save Changes') : t('driver_save_driver', 'Save Driver')}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -568,15 +719,15 @@ export default function DriversScreen() {
         <View style={styles.filterModalOverlay}>
           <View style={styles.filterModalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filter Drivers</Text>
+              <Text style={styles.modalTitle}>{t('driver_filter_title', 'Filter Drivers')}</Text>
               <TouchableOpacity onPress={() => setIsFilterModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
             <View style={{ padding: 20 }}>
-              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>By Status:</Text>
+              <Text style={{ fontSize: 14, color: '#6B7280', marginBottom: 10 }}>{t('driver_filter_by_status', 'By Status:')}</Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
-                {['All', 'Active', 'On Leave', 'Inactive'].map(status => (
+                {['All', 'Active', 'Pending', 'On Leave', 'Inactive'].map(status => (
                   <TouchableOpacity 
                     key={status} 
                     style={[
@@ -594,7 +745,118 @@ export default function DriversScreen() {
               </View>
               
               <TouchableOpacity style={styles.applyBtn} onPress={() => setIsFilterModalVisible(false)}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Apply Filters</Text>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('veh_apply_filters', 'Apply Filters')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Driver Invite Instructions Modal */}
+      <Modal visible={isInviteModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.inviteModalContainer}>
+            <View style={styles.inviteModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={styles.inviteModalIcon}>
+                  <Ionicons name="paper-plane" size={20} color="#043094" />
+                </View>
+                <Text style={styles.inviteModalTitle}>Invite Drivers to Fleet</Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsInviteModalVisible(false)} style={styles.closeBtn}>
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.inviteModalBody} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inviteModalSub}>
+                Drivers can create their own accounts on the Driver App and connect directly to your fleet using your code:
+              </Text>
+
+              {/* Code Box */}
+              <View style={styles.modalCodeCard}>
+                <Text style={styles.modalCodeLabel}>YOUR FLEET INVITE CODE</Text>
+                <Text style={styles.modalCodeValue}>{fleetCode || 'AV-XXXXXX'}</Text>
+                <TouchableOpacity 
+                  style={[styles.modalCopyBtn, copied && styles.modalCopyBtnDone]} 
+                  onPress={handleCopyCode}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name={copied ? "checkmark-circle" : "copy-outline"} size={16} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalCopyBtnText}>{copied ? "Code Copied to Clipboard!" : "Copy Fleet Code"}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Step-by-Step Flow */}
+              <View style={styles.stepsContainer}>
+                <Text style={styles.stepsHeading}>How Drivers Join:</Text>
+
+                <View style={styles.stepItem}>
+                  <View style={styles.stepNumberBadge}><Text style={styles.stepNumberText}>1</Text></View>
+                  <View style={styles.stepContent}>
+                    <Text style={styles.stepTitle}>Download Aviance Driver App</Text>
+                    <Text style={styles.stepDesc}>Driver downloads or opens the Aviance Driver application.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.stepItem}>
+                  <View style={styles.stepNumberBadge}><Text style={styles.stepNumberText}>2</Text></View>
+                  <View style={styles.stepContent}>
+                    <Text style={styles.stepTitle}>Create Account & Input Code</Text>
+                    <Text style={styles.stepDesc}>Driver signs up with their email and enters your Fleet Code {fleetCode || 'AV-XXXXXX'}.</Text>
+                  </View>
+                </View>
+
+                <View style={styles.stepItem}>
+                  <View style={styles.stepNumberBadge}><Text style={styles.stepNumberText}>3</Text></View>
+                  <View style={styles.stepContent}>
+                    <Text style={styles.stepTitle}>Instant Fleet Connection</Text>
+                    <Text style={styles.stepDesc}>The driver immediately appears here in your Drivers list ready for vehicle assignment and dispatch!</Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Ready-to-send Message */}
+              <View style={styles.messageBox}>
+                <Text style={styles.messageBoxLabel}>Ready-to-Send Invite Message</Text>
+                <Text style={styles.messageBoxText}>
+                  {`Join our fleet on Aviance! Download the Aviance Driver App, register your account, and enter our Fleet Join Code: ${fleetCode} to link with our fleet manager.`}
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.copyMessageBtn, copiedMessage && styles.copyMessageBtnDone]} 
+                  onPress={handleCopyInviteMessage}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name={copiedMessage ? "checkmark-circle" : "chatbubble-ellipses-outline"} size={16} color={copiedMessage ? "#059669" : "#1E40AF"} style={{ marginRight: 6 }} />
+                  <Text style={[styles.copyMessageBtnText, copiedMessage && { color: '#059669' }]}>
+                    {copiedMessage ? "Message Copied!" : "Copy Invite Message"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Optional Manual Fallback */}
+              <View style={styles.manualFallbackSection}>
+                <Text style={styles.manualFallbackTitle}>Alternative: Offline / Contractor Driver</Text>
+                <Text style={styles.manualFallbackDesc}>
+                  If your driver does not have a smartphone or won't be using the driver app, you can manually enter their profile into your fleet roster.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.manualAddBtn} 
+                  onPress={() => {
+                    setIsInviteModalVisible(false);
+                    router.push('/(manager)/drivers/new' as any);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="person-add-outline" size={16} color="#4B5563" style={{ marginRight: 6 }} />
+                  <Text style={styles.manualAddBtnText}>Add Driver Profile Manually</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <View style={styles.inviteModalFooter}>
+              <TouchableOpacity style={styles.closeModalBtn} onPress={() => setIsInviteModalVisible(false)}>
+                <Text style={styles.closeModalBtnText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -750,6 +1012,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#6B7280',
     textTransform: 'uppercase',
+    minWidth: 0,
   },
   tableRow: {
     flexDirection: 'row',
@@ -766,6 +1029,7 @@ const styles = StyleSheet.create({
   },
   td: {
     justifyContent: 'center',
+    minWidth: 0,
   },
   mobileDataRow: {
     flexDirection: 'row',
@@ -783,6 +1047,8 @@ const styles = StyleSheet.create({
   driverInfo: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   avatar: {
     width: 40,
@@ -790,6 +1056,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 12,
     backgroundColor: '#E5E7EB',
+    flexShrink: 0,
   },
   driverName: {
     fontSize: 14,
@@ -1007,4 +1274,387 @@ const styles = StyleSheet.create({
   filterOptionText: { color: '#4B5563', fontSize: 14 },
   filterOptionTextActive: { color: '#1D4ED8', fontWeight: '600' },
   applyBtn: { backgroundColor: '#043094', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 10 },
+  
+  // Secondary Header Btn
+  secondaryHeaderBtn: {
+    backgroundColor: '#EFF6FF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  secondaryHeaderBtnText: {
+    color: '#043094',
+    fontWeight: '600',
+    marginLeft: 6,
+    fontSize: 14,
+  },
+
+  // Invite Banner Styles
+  inviteBanner: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#DBEAFE',
+    padding: 20,
+    marginBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    shadowColor: '#1E40AF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  inviteBannerMobile: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 16,
+  },
+  inviteBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 16,
+  },
+  inviteIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  inviteTextContainer: {
+    flex: 1,
+  },
+  inviteTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  inviteBannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  inviteActiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+    marginRight: 4,
+  },
+  inviteActiveText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#15803D',
+    letterSpacing: 0.5,
+  },
+  inviteBannerDesc: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+  },
+  inviteBannerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inviteBannerRightMobile: {
+    width: '100%',
+    flexWrap: 'wrap',
+  },
+  codeDisplayContainer: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  codeDisplayLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  codeDisplayText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#043094',
+    letterSpacing: 1,
+  },
+  copyCodeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#043094',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  copyCodeBtnSuccess: {
+    backgroundColor: '#16A34A',
+  },
+  copyCodeBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  howItWorksBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  howItWorksBtnText: {
+    color: '#043094',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
+  // Invite Modal Styles
+  inviteModalContainer: {
+    width: '90%',
+    maxWidth: 540,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
+    maxHeight: '90%',
+  },
+  inviteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  inviteModalIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inviteModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  closeBtn: {
+    padding: 6,
+  },
+  inviteModalBody: {
+    padding: 20,
+  },
+  inviteModalSub: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  modalCodeCard: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1.5,
+    borderColor: '#BFDBFE',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalCodeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1E40AF',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  modalCodeValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#043094',
+    letterSpacing: 2,
+    marginBottom: 12,
+  },
+  modalCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#043094',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  modalCopyBtnDone: {
+    backgroundColor: '#16A34A',
+  },
+  modalCopyBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  stepsContainer: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  stepsHeading: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  stepItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  stepNumberBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#043094',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    marginTop: 2,
+  },
+  stepNumberText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  stepContent: {
+    flex: 1,
+  },
+  stepTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  stepDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+  },
+  messageBox: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  messageBoxLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 6,
+  },
+  messageBoxText: {
+    fontSize: 13,
+    color: '#4B5563',
+    lineHeight: 18,
+    fontStyle: 'italic',
+    marginBottom: 10,
+  },
+  copyMessageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  copyMessageBtnDone: {
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
+  },
+  copyMessageBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  inviteModalFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    alignItems: 'flex-end',
+  },
+  closeModalBtn: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  closeModalBtnText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  manualFallbackSection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  manualFallbackTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  manualFallbackDesc: {
+    fontSize: 12,
+    color: '#6B7280',
+    lineHeight: 16,
+    marginBottom: 12,
+  },
+  manualAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  manualAddBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+  },
 });

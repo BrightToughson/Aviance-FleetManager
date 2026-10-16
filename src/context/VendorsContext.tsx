@@ -1,5 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { useUser } from '@clerk/expo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type Vendor = {
   id: string;
@@ -20,7 +22,7 @@ export type Vendor = {
 type VendorsContextType = {
   vendors: Vendor[];
   loading: boolean;
-  addVendor: (vendor: Omit<Vendor, 'id'>) => Promise<void>;
+  addVendor: (vendor: Omit<Vendor, 'id'>) => Promise<Vendor | null>;
   updateVendor: (id: string, updates: Partial<Vendor>) => Promise<void>;
   deleteVendor: (id: string) => Promise<void>;
   refreshVendors: () => Promise<void>;
@@ -29,45 +31,71 @@ type VendorsContextType = {
 const VendorsContext = createContext<VendorsContextType | undefined>(undefined);
 
 export function VendorsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useUser();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchVendors = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('vendors')
-      .select('*')
-      .order('name');
-
-    if (error) {
-      console.error('Error fetching vendors:', error);
-    } else if (data) {
-      const formattedData: Vendor[] = data.map(v => ({
-        id: v.id,
-        name: v.name,
-        category: v.category || v.service_type || 'General',
-        status: v.status || 'Active',
-        contact: v.contact_name || '',
-        phone: v.phone || '',
-        email: v.email || '',
-        rating: parseFloat(v.rating) || 0,
-        logo: v.logo_url,
-        accountNumber: v.account_number,
-        taxId: v.tax_id,
-        paymentTerms: v.payment_terms,
-        address: v.address
-      }));
-      setVendors(formattedData);
+    if (!user?.id) {
+      setVendors([]);
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    setLoading(true);
+
+    try {
+      let myVendorIds: string[] = [];
+      try {
+        const stored = await AsyncStorage.getItem(`@manager_vendor_ids_${user.id}`);
+        if (stored) myVendorIds = JSON.parse(stored);
+      } catch (e) {
+        console.error('Error reading manager vendor IDs:', e);
+      }
+
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching vendors:', error);
+      } else if (data) {
+        const filtered = data.filter((v: any) => v.manager_id === user.id || myVendorIds.includes(v.id));
+        const formattedData: Vendor[] = filtered.map(v => ({
+          id: v.id,
+          name: v.name,
+          category: v.category || v.service_type || 'General',
+          status: v.status || 'Active',
+          contact: v.contact_name || '',
+          phone: v.phone || '',
+          email: v.email || '',
+          rating: parseFloat(v.rating) || 0,
+          logo: v.logo_url,
+          accountNumber: v.account_number,
+          taxId: v.tax_id,
+          paymentTerms: v.payment_terms,
+          address: v.address
+        }));
+        setVendors(formattedData);
+      }
+    } catch (err) {
+      console.error('Error in fetchVendors:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchVendors();
-  }, []);
+    if (user?.id) {
+      fetchVendors();
+    } else {
+      setVendors([]);
+      setLoading(false);
+    }
+  }, [user?.id]);
 
-  const addVendor = async (vendor: Omit<Vendor, 'id'>) => {
-    const { error } = await supabase.from('vendors').insert([{
+  const addVendor = async (vendor: Omit<Vendor, 'id'>): Promise<Vendor | null> => {
+    const { data, error } = await supabase.from('vendors').insert([{
       name: vendor.name,
       category: vendor.category,
       status: vendor.status,
@@ -80,11 +108,42 @@ export function VendorsProvider({ children }: { children: React.ReactNode }) {
       tax_id: vendor.taxId,
       payment_terms: vendor.paymentTerms,
       address: vendor.address,
-    }]);
+      manager_id: user?.id || null,
+    }]).select();
 
     if (!error) {
-      fetchVendors();
+      if (data && data[0]?.id && user?.id) {
+        try {
+          const stored = await AsyncStorage.getItem(`@manager_vendor_ids_${user.id}`);
+          const currentIds: string[] = stored ? JSON.parse(stored) : [];
+          if (!currentIds.includes(data[0].id)) {
+            currentIds.push(data[0].id);
+            await AsyncStorage.setItem(`@manager_vendor_ids_${user.id}`, JSON.stringify(currentIds));
+          }
+        } catch (e) {
+          console.error('Error saving manager vendor ID:', e);
+        }
+      }
+      await fetchVendors();
+      if (data && data[0]) {
+        return {
+          id: data[0].id,
+          name: data[0].name,
+          category: data[0].category || data[0].service_type || 'General',
+          status: data[0].status || 'Active',
+          contact: data[0].contact_name || '',
+          phone: data[0].phone || '',
+          email: data[0].email || '',
+          rating: parseFloat(data[0].rating) || 0,
+          logo: data[0].logo_url,
+          accountNumber: data[0].account_number,
+          taxId: data[0].tax_id,
+          paymentTerms: data[0].payment_terms,
+          address: data[0].address
+        };
+      }
     }
+    return null;
   };
 
   const updateVendor = async (id: string, updates: Partial<Vendor>) => {
@@ -94,11 +153,11 @@ export function VendorsProvider({ children }: { children: React.ReactNode }) {
     if (updates.name) dbUpdates.name = updates.name;
     if (updates.category) dbUpdates.category = updates.category;
     if (updates.status) dbUpdates.status = updates.status;
-    if (updates.contact) dbUpdates.contact_name = updates.contact;
-    if (updates.phone) dbUpdates.phone = updates.phone;
-    if (updates.email) dbUpdates.email = updates.email;
-    if (updates.rating) dbUpdates.rating = updates.rating;
-    if (updates.logo) dbUpdates.logo_url = updates.logo;
+    if (updates.contact !== undefined) dbUpdates.contact_name = updates.contact;
+    if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+    if (updates.email !== undefined) dbUpdates.email = updates.email;
+    if (updates.rating !== undefined) dbUpdates.rating = updates.rating;
+    if (updates.logo !== undefined) dbUpdates.logo_url = updates.logo;
     if (updates.accountNumber) dbUpdates.account_number = updates.accountNumber;
     if (updates.taxId) dbUpdates.tax_id = updates.taxId;
     if (updates.paymentTerms) dbUpdates.payment_terms = updates.paymentTerms;

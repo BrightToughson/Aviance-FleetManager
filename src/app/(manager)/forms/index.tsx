@@ -81,7 +81,6 @@ export default function FormsScreen() {
               </TouchableOpacity>
             </View>
             
-            <Text style={styles.formId}>{form.id}</Text>
             <Text style={styles.cardTitle} numberOfLines={1}>{form.title}</Text>
             <Text style={styles.cardDesc} numberOfLines={2}>{form.description}</Text>
             

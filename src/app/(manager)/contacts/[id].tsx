@@ -2,46 +2,94 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, useWindowDimensions, Platform, Alert, Linking, Modal } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import FormModal, { FormField } from '../../../components/FormModal';
+import { useTranslation } from 'react-i18next';
+import { usePersonnel } from '../../../context/PersonnelContext';
 
 export default function ContactDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const isMobile = width < 1024;
   const [isMessageModalVisible, setIsMessageModalVisible] = useState(false);
 
-  // Local state for the contact profile
-  const [contact, setContact] = useState({
+  const { personnel, updatePerson, deletePersons } = usePersonnel();
+  
+  // Find the contact from global state or fallback to a default if not found yet
+  const contact = personnel.find(p => p.id === id) || {
     id: id as string,
-    name: id === 'CNT-001' ? 'Michael Scott' : 'Contact Name',
-    role: 'Regional Manager',
-    department: 'Operations',
-    phone: '(555) 123-4567',
-    whatsapp: '15551234567',
-    email: 'mscott@aviance.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80',
+    name: 'Loading...',
+    role: 'Driver',
+    department: 'Fleet',
+    contact_type: 'Internal',
+    phone: '',
+    whatsapp: '',
+    email: '',
+    avatar: '',
     location: 'Headquarters',
-    notes: 'Primary point of contact for regional fleet ops.',
-  });
+    notes: '',
+  };
+
+  const isInternal = contact.contact_type === 'Internal' || contact.role === 'Driver' || contact.role === 'Manager' || (contact as any).isProfile;
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
 
   const editFields: FormField[] = [
-    { name: 'name', label: 'Full Name', type: 'text', placeholder: 'e.g. John Doe', required: true, defaultValue: contact.name },
-    { name: 'role', label: 'Job Role', type: 'text', defaultValue: contact.role },
-    { name: 'department', label: 'Department', type: 'select', options: ['Operations', 'Maintenance', 'Admin', 'Safety'], defaultValue: contact.department },
-    { name: 'email', label: 'Email Address', type: 'text', defaultValue: contact.email },
-    { name: 'phone', label: 'Phone Number', type: 'text', defaultValue: contact.phone },
-    { name: 'whatsapp', label: 'WhatsApp Number', type: 'text', defaultValue: contact.whatsapp },
-    { name: 'location', label: 'Location', type: 'text', defaultValue: contact.location },
+    { name: 'name', label: t('contact_lbl_name', 'Full Name'), type: 'text', placeholder: 'e.g. John Doe', required: true, defaultValue: contact.name },
+    { name: 'role', label: t('contact_lbl_role', 'Job Role'), type: 'select', options: ['Driver', 'Manager', 'Mechanic', 'Supplier', 'Admin', 'Staff'], defaultValue: contact.role },
+    { name: 'department', label: t('contact_lbl_dept', 'Department'), type: 'select', options: ['Fleet', 'Operations', 'Maintenance', 'Admin', 'Safety'], defaultValue: contact.department || 'Fleet' },
+    { name: 'contact_type', label: 'Contact Type', type: 'select', options: ['Internal', 'External'], defaultValue: contact.contact_type || (isInternal ? 'Internal' : 'External') },
+    { name: 'company', label: 'Company (External)', type: 'text', dependsOn: { field: 'contact_type', value: 'External' }, defaultValue: contact.company || '' },
+    { name: 'email', label: t('contact_lbl_email', 'Email Address'), type: 'text', defaultValue: contact.email },
+    { name: 'phone', label: t('contact_lbl_phone', 'Phone Number'), type: 'text', defaultValue: contact.phone },
+    { name: 'whatsapp', label: t('contact_lbl_whatsapp', 'WhatsApp Number'), type: 'text', defaultValue: (contact as any).whatsapp || '' },
+    { name: 'location', label: t('contact_lbl_location', 'Location'), type: 'text', defaultValue: (contact as any).location || '' },
+    { name: 'avatar', label: t('contact_lbl_avatar', 'Profile Image URL'), type: 'text', defaultValue: contact.avatar },
   ];
 
-  const handleSaveEdit = (data: any) => {
-    setContact({ ...contact, ...data });
-    setIsEditModalVisible(false);
-    if (Platform.OS === 'web') window.alert("Contact updated successfully!");
-    else Alert.alert("Success", "Contact updated successfully!");
+  const handleSaveEdit = async (data: any) => {
+    try {
+      await updatePerson(id as string, data);
+      setIsEditModalVisible(false);
+      if (Platform.OS === 'web') window.alert("Contact updated successfully!");
+      else Alert.alert("Success", "Contact updated successfully!");
+    } catch (err: any) {
+      console.error(err);
+      if (Platform.OS === 'web') window.alert("Failed to update contact: " + (err.message || String(err)));
+      else Alert.alert("Error", "Failed to update contact: " + (err.message || String(err)));
+    }
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+
+    if (!result.canceled) {
+      await handleSaveEdit({ avatar: result.assets[0].uri });
+    }
+  };
+
+  const handleDelete = () => {
+    const confirmDelete = () => {
+      deletePersons([id as string]);
+      if (Platform.OS === 'web') window.alert('Contact deleted.');
+      router.back();
+    };
+    
+    if (Platform.OS === 'web') {
+      if (window.confirm("Are you sure you want to delete this contact?")) confirmDelete();
+    } else {
+      Alert.alert('Delete Contact', 'Are you sure you want to delete this contact?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete }
+      ]);
+    }
   };
 
   return (
@@ -51,53 +99,74 @@ export default function ContactDetailScreen() {
         <View style={styles.breadcrumb}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={20} color="#6B7280" />
-            <Text style={styles.backBtnText}>Back to Contacts</Text>
+            <Text style={styles.backBtnText}>{t('contact_back', 'Back to Contacts')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => setIsMessageModalVisible(true)}>
             <Ionicons name="chatbubble-outline" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>Message</Text>
+            {!isMobile && <Text style={styles.primaryBtnText}>{t('contact_message', 'Message')}</Text>}
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.secondaryBtn}
             onPress={() => setIsEditModalVisible(true)}
           >
             <Ionicons name="create-outline" size={18} color="#4B5563" />
-            <Text style={styles.secondaryBtnText}>Edit</Text>
+            {!isMobile && <Text style={styles.secondaryBtnText}>{t('common_edit', 'Edit')}</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.secondaryBtn, { borderColor: '#FEE2E2', backgroundColor: '#FEF2F2' }]}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={18} color="#EF4444" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Main Profile Section */}
       <View style={styles.profileCard}>
-        <View style={[styles.profileHeader, isMobile && { flexDirection: 'column', alignItems: 'flex-start' }]}>
-          <Image source={{ uri: contact.avatar }} style={styles.profileAvatar} />
-          <View style={styles.profileTitleContainer}>
-            <Text style={styles.profileName}>{contact.name}</Text>
-            <View style={styles.badgesRow}>
-              <Text style={styles.idBadge}>{contact.id}</Text>
+        <View style={styles.profileHeader}>
+          <TouchableOpacity onPress={pickImage} style={{ position: 'relative', marginBottom: 16 }}>
+            {contact.avatar ? (
+              <Image source={{ uri: contact.avatar }} style={styles.profileAvatar} />
+            ) : (
+              <View style={[styles.profileAvatar, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E5E7EB' }]}>
+                <Ionicons name="person" size={48} color="#9CA3AF" />
+              </View>
+            )}
+            <View style={{ position: 'absolute', bottom: 0, right: 0, backgroundColor: '#043094', width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: '#fff' }}>
+              <Ionicons name="camera" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          
+          <Text style={styles.profileName}>{contact.name}</Text>
+          <Text style={styles.roleText}>{contact.role}</Text>
+          
+          <View style={styles.badgesRow}>
+            {contact.department !== 'Unassigned' && (
               <View style={styles.deptBadge}>
+                <Ionicons name="business" size={14} color="#1D4ED8" style={{ marginRight: 4 }} />
                 <Text style={styles.deptBadgeText}>{contact.department}</Text>
               </View>
+            )}
+            <View style={[styles.deptBadge, { backgroundColor: (contact.contact_type === 'Internal' || isInternal) ? '#ECFDF5' : '#F3F4F6' }]}>
+              <Text style={[styles.deptBadgeText, { color: (contact.contact_type === 'Internal' || isInternal) ? '#059669' : '#4B5563' }]}>
+                {contact.contact_type || (isInternal ? 'Internal' : 'External')}
+              </Text>
             </View>
-          </View>
-          <View style={[styles.roleBadge, isMobile && { marginTop: 15 }]}>
-            <Ionicons name="briefcase-outline" size={18} color="#043094" />
-            <Text style={styles.roleText}>{contact.role}</Text>
           </View>
         </View>
         
         <View style={[styles.infoGrid, isMobile && { flexDirection: 'column' }]}>
           <View style={[styles.infoColumn, isMobile && { borderRightWidth: 0, borderBottomWidth: 1 }]}>
-            <Text style={styles.columnTitle}>Contact Methods</Text>
+            <Text style={styles.columnTitle}>{t('contact_methods', 'Contact Methods')}</Text>
             
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <Ionicons name="mail" size={16} color="#6B7280" />
               </View>
               <View>
-                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoLabel}>{t('contact_email', 'Email')}</Text>
                 <Text style={styles.infoText}>{contact.email}</Text>
               </View>
             </View>
@@ -107,21 +176,21 @@ export default function ContactDetailScreen() {
                 <Ionicons name="call" size={16} color="#6B7280" />
               </View>
               <View>
-                <Text style={styles.infoLabel}>Phone</Text>
+                <Text style={styles.infoLabel}>{t('contact_phone', 'Phone')}</Text>
                 <Text style={styles.infoText}>{contact.phone}</Text>
               </View>
             </View>
           </View>
 
           <View style={styles.infoColumn}>
-            <Text style={styles.columnTitle}>Additional Details</Text>
+            <Text style={styles.columnTitle}>{t('contact_add_details', 'Additional Details')}</Text>
             
             <View style={styles.infoRow}>
               <View style={styles.iconBox}>
                 <Ionicons name="location" size={16} color="#6B7280" />
               </View>
               <View>
-                <Text style={styles.infoLabel}>Location</Text>
+                <Text style={styles.infoLabel}>{t('contact_location', 'Location')}</Text>
                 <Text style={styles.infoText}>{contact.location}</Text>
               </View>
             </View>
@@ -131,7 +200,7 @@ export default function ContactDetailScreen() {
                 <Ionicons name="document-text" size={16} color="#6B7280" />
               </View>
               <View>
-                <Text style={styles.infoLabel}>Notes</Text>
+                <Text style={styles.infoLabel}>{t('contact_notes', 'Notes')}</Text>
                 <Text style={styles.infoText}>{contact.notes}</Text>
               </View>
             </View>
@@ -144,7 +213,7 @@ export default function ContactDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Contact {contact.name}</Text>
+              <Text style={styles.modalTitle}>{t('contact_message_title', 'Contact {{name}}', { name: contact.name })}</Text>
               <TouchableOpacity onPress={() => setIsMessageModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -173,7 +242,7 @@ export default function ContactDetailScreen() {
                 <View style={[styles.msgIconBox, { backgroundColor: '#E0E7FF' }]}>
                   <Ionicons name="chatbox-ellipses" size={24} color="#4338CA" />
                 </View>
-                <Text style={styles.msgOptionText}>SMS Message</Text>
+                <Text style={styles.msgOptionText}>{t('contact_msg_sms', 'SMS Message')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -186,7 +255,7 @@ export default function ContactDetailScreen() {
                 <View style={[styles.msgIconBox, { backgroundColor: '#FEE2E2' }]}>
                   <Ionicons name="mail" size={24} color="#DC2626" />
                 </View>
-                <Text style={styles.msgOptionText}>Send Email</Text>
+                <Text style={styles.msgOptionText}>{t('contact_msg_email', 'Send Email')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -197,7 +266,7 @@ export default function ContactDetailScreen() {
       <FormModal 
         visible={isEditModalVisible}
         onClose={() => setIsEditModalVisible(false)}
-        title="Edit Contact Profile"
+        title={t('contact_edit_title', 'Edit Contact Profile')}
         fields={editFields}
         onSubmit={handleSaveEdit}
       />
@@ -219,18 +288,18 @@ const styles = StyleSheet.create({
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6 },
   secondaryBtnText: { color: '#4B5563', fontWeight: '500', fontSize: 14 },
   
-  profileCard: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden', marginBottom: 24 },
-  profileHeader: { flexDirection: 'row', alignItems: 'center', padding: 24, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', backgroundColor: '#F8FAFC' },
-  profileAvatar: { width: 80, height: 80, borderRadius: 40, marginRight: 20 },
+  profileCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', overflow: 'hidden', marginBottom: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 2 },
+  profileHeader: { alignItems: 'center', padding: 40, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', backgroundColor: '#F8FAFC' },
+  profileAvatar: { width: 110, height: 110, borderRadius: 55, borderWidth: 4, borderColor: '#fff', shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 8 },
   profileTitleContainer: { flex: 1 },
-  profileName: { fontSize: 24, fontWeight: '700', color: '#111827', marginBottom: 8 },
-  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  profileName: { fontSize: 26, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
+  roleText: { fontSize: 16, fontWeight: '500', color: '#64748B', marginBottom: 16 },
+  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
   idBadge: { backgroundColor: '#E2E8F0', color: '#475569', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, fontSize: 12, fontWeight: '600' },
-  deptBadge: { backgroundColor: '#EFF6FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  deptBadgeText: { color: '#1D4ED8', fontSize: 12, fontWeight: '600' },
+  deptBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20 },
+  deptBadgeText: { color: '#1D4ED8', fontSize: 13, fontWeight: '600' },
   
   roleBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' },
-  roleText: { fontSize: 14, fontWeight: '600', color: '#111827' },
   
   infoGrid: { flexDirection: 'row' },
   infoColumn: { flex: 1, padding: 24, borderRightWidth: 1, borderRightColor: '#E5E7EB' },

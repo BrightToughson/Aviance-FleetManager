@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '@clerk/expo';
 
 export type Schedule = {
   id: string;
@@ -17,81 +18,93 @@ export type Schedule = {
 interface SchedulesContextType {
   schedules: Schedule[];
   loading: boolean;
-  setSchedules: React.Dispatch<React.SetStateAction<Schedule[]>>;
+  setSchedules: (updater: Schedule[] | ((prev: Schedule[]) => Schedule[])) => void;
   addSchedule: (schedule: Schedule) => Promise<void>;
   updateSchedule: (id: string, updated: Partial<Schedule>) => Promise<void>;
+  deleteSchedule?: (id: string) => Promise<void>;
+  clearSchedules?: () => Promise<void>;
   refreshSchedules: () => Promise<void>;
 }
 
 const SchedulesContext = createContext<SchedulesContextType | undefined>(undefined);
 
 export const SchedulesProvider = ({ children }: { children: ReactNode }) => {
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const { user } = useUser();
+  const [schedules, setSchedulesState] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchSchedules = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('reminders')
-      .select('*')
-      .order('due_date', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching schedules/reminders:', error);
-    } else if (data) {
-      const formattedData: Schedule[] = data.map((item: any) => {
-        const due = new Date(item.due_date);
-        const today = new Date();
-        const diffTime = Math.abs(due.getTime() - today.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
-        return {
-          id: item.id,
-          title: item.title,
-          dueDate: due.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-          daysLeft: item.due_date ? diffDays : 0,
-          type: item.title.includes('License') ? 'Document' : item.title.includes('Service') ? 'Maintenance' : 'Training',
-          icon: item.title.includes('License') ? 'document-text' : item.title.includes('Service') ? 'construct' : 'school',
-          status: item.status || 'active',
-          description: item.description || '',
-          isReminder: true,
-        };
-      });
-      setSchedules(formattedData);
+    if (!user?.id) {
+      setSchedulesState([]);
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+    setLoading(true);
+    try {
+      const stored = await AsyncStorage.getItem(`@manager_schedules_${user.id}`);
+      if (stored) {
+        setSchedulesState(JSON.parse(stored));
+      } else {
+        setSchedulesState([]);
+      }
+    } catch (e) {
+      console.error('Error fetching manager schedules:', e);
+      setSchedulesState([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchSchedules();
-  }, []);
+  }, [user?.id]);
+
+  const setSchedules = (updater: Schedule[] | ((prev: Schedule[]) => Schedule[])) => {
+    setSchedulesState(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (user?.id) {
+        AsyncStorage.setItem(`@manager_schedules_${user.id}`, JSON.stringify(next)).catch(console.error);
+      }
+      return next;
+    });
+  };
 
   const addSchedule = async (schedule: Schedule) => {
-    const { error } = await supabase.from('reminders').insert([{
-      title: schedule.title,
-      description: schedule.description,
-      status: schedule.status,
-      // Assume dueDate is parseable or just skip date math for now if it's complex
-    }]);
-
-    if (!error) {
-      fetchSchedules();
-    }
+    if (!user?.id) return;
+    setSchedules(prev => [schedule, ...prev]);
   };
 
   const updateSchedule = async (id: string, updated: Partial<Schedule>) => {
+    if (!user?.id) return;
     setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...updated } : s));
-    
-    const dbUpdates: any = {};
-    if (updated.title) dbUpdates.title = updated.title;
-    if (updated.description) dbUpdates.description = updated.description;
-    if (updated.status) dbUpdates.status = updated.status;
-    
-    await supabase.from('reminders').update(dbUpdates).eq('id', id);
+  };
+
+  const deleteSchedule = async (id: string) => {
+    if (!user?.id) return;
+    setSchedules(prev => prev.filter(s => s.id !== id));
+  };
+
+  const clearSchedules = async () => {
+    if (!user?.id) return;
+    setSchedulesState([]);
+    try {
+      await AsyncStorage.removeItem(`@manager_schedules_${user.id}`);
+    } catch (e) {
+      console.error('Error clearing manager schedules:', e);
+    }
   };
 
   return (
-    <SchedulesContext.Provider value={{ schedules, loading, setSchedules, addSchedule, updateSchedule, refreshSchedules: fetchSchedules }}>
+    <SchedulesContext.Provider value={{ 
+      schedules, 
+      loading, 
+      setSchedules, 
+      addSchedule, 
+      updateSchedule, 
+      deleteSchedule,
+      clearSchedules,
+      refreshSchedules: fetchSchedules 
+    }}>
       {children}
     </SchedulesContext.Provider>
   );
@@ -104,4 +117,3 @@ export const useSchedules = () => {
   }
   return context;
 };
-
